@@ -1,0 +1,4 @@
+vehicle_type,capacity_litres,purchase_cost_inr,fuel_cost_per_km,co2_g_per_km,crew_size
+small_van,200,850000,8.5,180,2
+large_van,350,1200000,11.0,240,2
+ev_van,280,1600000,3.2,40,2

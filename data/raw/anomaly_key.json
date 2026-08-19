@@ -1,0 +1,15 @@
+{
+  "note": "Ground-truth answer key for A17 (surge-alarm). Do NOT give to students who must find these themselves; for faculty grading.",
+  "events": [
+    {
+      "date": "2025-05-12",
+      "type": "real_surge",
+      "cause": "heatwave dust event; demand ~2.3x normal"
+    },
+    {
+      "date": "2024-09-03",
+      "type": "data_glitch",
+      "cause": "double-logged bookings (~40% duplicated rows)"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+date,name,demand_multiplier
+2024-01-26,Republic Day,0.75
+2024-03-24,Holi Eve (pre-wash rush),1.35
+2024-03-25,Holi,0.6
+2024-08-15,Independence Day,0.8
+2024-10-02,Gandhi Jayanti,0.85
+2024-10-20,Karva Chauth,1.15
+2024-11-01,Diwali (pre-wash rush),1.55
+2024-11-02,Diwali,0.45
+2024-11-03,Diwali Holiday,0.55
+2024-12-25,Christmas,0.8
+2024-12-31,New Year Eve,1.2
+2025-01-26,Republic Day,0.75
+2025-03-24,Holi Eve (pre-wash rush),1.35
+2025-03-25,Holi,0.6
+2025-08-15,Independence Day,0.8
+2025-10-02,Gandhi Jayanti,0.85
+2025-10-20,Karva Chauth,1.15
+2025-11-01,Diwali (pre-wash rush),1.55
+2025-11-02,Diwali,0.45
+2025-11-03,Diwali Holiday,0.55
+2025-12-25,Christmas,0.8
+2025-12-31,New Year Eve,1.2
