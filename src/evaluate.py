@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_absolute_error, r2_score
 
-from data_loader import SEED
+from data_loader import SEED, TARGET
 
 MAX_JOBS = 10
 N_DRAWS = 20000
@@ -22,7 +22,7 @@ def regression_metrics(y_true, y_pred):
 
 
 def metrics_by_job_type(y_true, y_pred, interior):
-    """Split errors by job type; interior jobs carry most of the variance."""
+    """Split errors by job type, to show the model is not carried by one group."""
     y_true = np.asarray(y_true)
     y_pred = np.asarray(y_pred)
     interior = np.asarray(interior).astype(int)
@@ -84,4 +84,61 @@ def jobs_per_tank(water, vehicles, service_levels=SERVICE_LEVELS, seed=SEED):
             feasible = probabilities.index[probabilities >= level]
             row[f"max_jobs_at_{int(level * 100)}pct"] = int(feasible.max()) if len(feasible) else 0
         rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def crew_day_loads(df):
+    """Water drawn and jobs served per crew per day."""
+    return df.groupby(["date", "crew_id"]).agg(
+        jobs=(TARGET, "size"), litres=(TARGET, "sum")
+    )
+
+
+def refills_needed(water_sequence, capacity):
+    """Mid-day refills for one crew-day, serving jobs in the order they happened.
+
+    A crew cannot start a job it has no water for, so the tank is topped up before
+    that job rather than part-way through it.
+    """
+    refills = 0
+    remaining = capacity
+    for litres in water_sequence:
+        if litres > remaining:
+            refills += 1
+            remaining = capacity
+        remaining -= litres
+    return refills
+
+
+def refill_plan(df, vehicles):
+    """Refill frequency per crew-day, per tank size, assuming each day starts full.
+
+    A single jobs-per-tank number hides the real constraint: most crew-days draw more
+    than one tank, so the operational question is how often a crew has to break off
+    and refill.
+    """
+    ordered = df.sort_values(["date", "crew_id", "arrival_time"])
+    day_sequences = [
+        group.to_numpy() for _, group in ordered.groupby(["date", "crew_id"])[TARGET]
+    ]
+
+    rows = []
+    for _, vehicle in vehicles.iterrows():
+        capacity = vehicle["capacity_litres"]
+        refills = np.array(
+            [refills_needed(sequence, capacity) for sequence in day_sequences]
+        )
+        rows.append(
+            {
+                "vehicle_type": vehicle["vehicle_type"],
+                "capacity_litres": capacity,
+                "n_crew_days": len(refills),
+                "mean_refills_per_day": round(float(refills.mean()), 3),
+                "p95_refills_per_day": int(np.quantile(refills, 0.95)),
+                "max_refills_per_day": int(refills.max()),
+                "pct_days_no_refill": round(float((refills == 0).mean() * 100), 1),
+                "pct_days_one_refill": round(float((refills == 1).mean() * 100), 1),
+                "pct_days_two_plus_refills": round(float((refills >= 2).mean() * 100), 1),
+            }
+        )
     return pd.DataFrame(rows)

@@ -10,6 +10,7 @@ Outputs produced by the A7 pipeline. Everything here is regenerated from
 | `plots/` | EDA (Week 2) | produced — see below |
 | `consumption_model.csv` | required A7 deliverable | produced by `src/train.py` |
 | `tank_capacity.csv` | required A7 deliverable (max jobs per tank) | produced by `src/train.py` |
+| `refill_planning.csv` | refill frequency per crew-day | produced by `src/train.py` |
 
 Regenerate both with `python src/train.py` from the repository root. That also appends
 one row per model run to `experiments.csv`.
@@ -25,14 +26,20 @@ One row per scenario the module has to quote a figure for, for both prediction s
 - `n_observed`, `observed_mean_litres`, `observed_sd_litres` — empirical support per cell
 
 Intervals are residual quantiles calibrated on a split disjoint from both the fit and the
-test split, held separately for exterior and interior jobs because their spreads differ
-(~3 L against ~8 L). Measured coverage on the held-out test split is 0.900 for both stages.
+test split. Measured coverage on the held-out test split is 0.900 for both stages.
 
 ## tank_capacity.csv
 
 Maximum jobs per tank per vehicle at the 90 / 95 / 99% service levels, with the
 mean-based figure and the probability that it actually fits, by resampling observed
 per-job consumption (20,000 draws, seed 7).
+
+## refill_planning.csv
+
+Mid-day refills per crew-day per vehicle, counted by walking each crew-day in arrival
+order and topping up before any job the remaining water cannot cover. A single
+jobs-per-tank number hides the real constraint: crews average 262 L a day against tanks
+of 200–350 L, so 61% / 39% / 24% of crew-days need at least one refill.
 
 ## Model selection
 

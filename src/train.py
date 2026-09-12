@@ -20,7 +20,14 @@ from data_loader import (
     load_jobs,
     load_vehicles,
 )
-from evaluate import interval_coverage, jobs_per_tank, metrics_by_job_type, regression_metrics
+from evaluate import (
+    crew_day_loads,
+    interval_coverage,
+    jobs_per_tank,
+    metrics_by_job_type,
+    refill_plan,
+    regression_metrics,
+)
 from model import MODEL_ORDER, IntervalRegressor, build_model
 
 TEST_SIZE = 0.2
@@ -42,6 +49,7 @@ RUNS = [
 EXPERIMENTS = ROOT / "experiments.csv"
 CONSUMPTION_MODEL = RESULTS / "consumption_model.csv"
 TANK_CAPACITY = RESULTS / "tank_capacity.csv"
+REFILL_PLANNING = RESULTS / "refill_planning.csv"
 
 
 def run_experiments(df, idx_train, idx_test):
@@ -191,8 +199,20 @@ def main():
     print("\nMaximum jobs per tank")
     print(tanks.to_string(index=False))
 
+    refills = refill_plan(df, vehicles)
+    refills.to_csv(REFILL_PLANNING, index=False, encoding="utf-8")
+    print("\nRefills per crew-day")
+    print(refills.to_string(index=False))
+
+    loads = crew_day_loads(df)
+    print(
+        f"\ncrew-day load: mean {loads.jobs.mean():.1f} jobs, {loads.litres.mean():.0f} L "
+        f"| p95 {loads.litres.quantile(0.95):.0f} L | max {loads.litres.max():.0f} L"
+    )
+
     print(f"\nwrote {CONSUMPTION_MODEL.relative_to(ROOT)} ({len(consumption_model)} rows)")
     print(f"wrote {TANK_CAPACITY.relative_to(ROOT)} ({len(tanks)} rows)")
+    print(f"wrote {REFILL_PLANNING.relative_to(ROOT)} ({len(refills)} rows)")
     print(f"logged {len(experiments)} runs to {EXPERIMENTS.relative_to(ROOT)}")
 
 

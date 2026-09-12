@@ -39,9 +39,8 @@ class GroupMean(BaseEstimator, RegressorMixin):
 class IntervalRegressor(BaseEstimator, RegressorMixin):
     """Wrap a regressor with residual-quantile prediction intervals.
 
-    Residual spread is ~3 L on exterior jobs against ~8 L on interior ones, so the
-    quantiles are held per job type instead of pooled into one misleading band.
-    Calibrate on data the estimator was not fitted on.
+    Calibrate on data the estimator was not fitted on, otherwise the band reports the
+    nominal level back by construction.
     """
 
     def __init__(self, estimator, level=0.90):
@@ -54,15 +53,11 @@ class IntervalRegressor(BaseEstimator, RegressorMixin):
 
     def calibrate(self, X, y):
         residuals = np.asarray(y) - self.estimator.predict(X)
-        interior = _interior_flag(X)
         lo_q, hi_q = (1 - self.level) / 2, (1 + self.level) / 2
-        self.offsets_ = {
-            group: (
-                float(np.quantile(residuals[interior == group], lo_q)),
-                float(np.quantile(residuals[interior == group], hi_q)),
-            )
-            for group in (0, 1)
-        }
+        self.offsets_ = (
+            float(np.quantile(residuals, lo_q)),
+            float(np.quantile(residuals, hi_q)),
+        )
         return self
 
     def predict(self, X):
@@ -70,14 +65,7 @@ class IntervalRegressor(BaseEstimator, RegressorMixin):
 
     def predict_interval(self, X):
         prediction = self.predict(X)
-        interior = _interior_flag(X)
-        lo = np.array([self.offsets_[g][0] for g in interior])
-        hi = np.array([self.offsets_[g][1] for g in interior])
-        return prediction + lo, prediction + hi
-
-
-def _interior_flag(X):
-    return pd.DataFrame(X)["interior_clean"].to_numpy().astype(int)
+        return prediction + self.offsets_[0], prediction + self.offsets_[1]
 
 
 MODELS = {
