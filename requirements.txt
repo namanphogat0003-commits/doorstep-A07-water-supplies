@@ -1,0 +1,12 @@
+# A7 — Water and Supplies
+# Python 3.12 recommended (development kernel: base, Python 3.12.4)
+# Install with:  pip install -r requirements.txt
+
+pandas>=2.0
+numpy>=1.24
+matplotlib>=3.7
+scikit-learn>=1.3
+
+# Notebook execution (only needed to run/re-run notebooks/)
+jupyter>=1.0
+ipykernel>=6.25
