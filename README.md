@@ -27,6 +27,7 @@ This module predicts water consumption for mobile car-washing jobs and determine
 python -m venv .venv
 .venv/Scripts/python.exe -m pip install -r requirements.txt   # Windows
 .venv/Scripts/python.exe src/train.py
+.venv/Scripts/python.exe -m pytest tests -q
 ```
 
 On macOS or Linux use `.venv/bin/python` instead. `src/train.py` trains both the
