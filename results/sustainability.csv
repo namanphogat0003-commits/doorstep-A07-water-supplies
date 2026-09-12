@@ -1,0 +1,10 @@
+benchmark,reclaim,source,basis,gallons_per_wash,benchmark_litres_per_wash,doorstep_litres_per_wash,difference_litres,doorstep_pct_of_benchmark,fleet_litres_saved
+conveyor_friction_no_reclaim,none,EPA 2012,friction conveyor without reclaim,65.8,249.1,55.7,-193.4,22.4,7601021.0
+home_hose_running,none,EPA hose,6 gal/min over a 10-minute wash,60.0,227.1,55.7,-171.4,24.5,6738130.0
+in_bay_automatic_no_reclaim,none,EPA 2012,in-bay automatic without reclaim,60.0,227.1,55.7,-171.4,24.5,6738130.0
+in_bay_automatic_measured_fleet,mostly yes,ICA 2018,"measured fleet average, 6 in-bay sites, 2017",44.8,169.6,55.7,-113.9,32.8,4476761.0
+conveyor_measured_fleet,mostly yes,ICA 2018,"measured fleet average, 6 conveyor sites, 2017",30.0,113.6,55.7,-57.9,49.0,2274902.0
+conveyor_frictionless_reclaim,yes,EPA 2012,"frictionless conveyor with reclaim, freshwater make-up",16.8,63.6,55.7,-7.9,87.6,311082.0
+self_service_wand,not feasible,EPA 2012,average self-service bay,15.0,56.8,55.7,-1.1,98.1,43289.0
+in_bay_automatic_reclaim,yes,EPA 2012,"in-bay automatic with reclaim, freshwater make-up",8.0,30.3,55.7,25.4,183.9,-998131.0
+conveyor_friction_reclaim,yes,EPA 2012,"friction conveyor with reclaim, freshwater make-up",7.8,29.5,55.7,26.2,188.6,-1027886.0

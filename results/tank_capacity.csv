@@ -1,0 +1,4 @@
+vehicle_type,capacity_litres,mean_based_jobs,p_mean_based_fits,max_jobs_at_90pct,max_jobs_at_95pct,max_jobs_at_99pct
+small_van,200,3,0.9086,3,2,2
+ev_van,280,5,0.534,4,4,3
+large_van,350,6,0.6964,5,5,4
