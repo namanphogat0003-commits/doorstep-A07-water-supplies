@@ -10,6 +10,7 @@ This module predicts water consumption for mobile car-washing jobs and determine
 - Ranu Raj — Data & EDA: data exploration, preprocessing, visualisation
 - Vansh Rana — ML Engineer: machine learning models and training
 - Priyanshu — Optimisation & Evaluation: tank-capacity optimisation and model evaluation
+- Rudransh — Documentation & Paper: technical paper and project documentation
 
 ## Repository Structure
 

@@ -4,7 +4,8 @@
 Doorstep, Track A "Service as a Service" · BTech 7th Semester AI & ML Thematic Assessment
 
 Naman Kumar (team lead, ML pipeline, integration) · Ranu Raj (data and EDA) ·
-Vansh Rana (ML engineering) · Priyanshu (optimisation and evaluation)
+Vansh Rana (ML engineering) · Priyanshu (optimisation and evaluation) ·
+Rudransh (documentation and paper)
 
 ---
 
