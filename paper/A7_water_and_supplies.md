@@ -47,7 +47,60 @@ The second question is what actually constrains scheduling, and it cannot be ans
 without the first. A module that predicts consumption accurately but reports capacity as a
 single number will mislead whoever schedules the day.
 
-## 2. Data
+## 2. Related work
+
+Ten studies, grouped by the question they answer for this module.
+
+**What a car wash actually consumes.** Monney et al. [1] give empirical estimates of water
+consumption and pollution loads across the commercial carwash industry, establishing that
+per-vehicle consumption must be measured rather than assumed. Maciejewska and Reizer [2]
+compare four professional wash types across Poland and find carbon footprints from 0.88 kg
+CO₂ (hand wash, gas heating) to 4.46 kg CO₂ (rollover wash, electric heating), concluding
+that wash *type* dominates the footprint. Zaneti et al. [3] audit a full-scale car-wash
+reclamation plant over 22 weeks and report almost 70% reclamation, needing fewer than 40 L
+of fresh water per wash. Together these frame our comparison: the spread across facility
+types is far wider than the spread within one, so a single "conventional car wash" figure
+would be meaningless. [3] also corroborates our own result independently — at under 40 L
+fresh per wash, a reclaim-equipped facility uses less than our measured 55.7 L, and a mobile
+van cannot reclaim because the water leaves with it.
+
+**Predicting water demand.** Donkor et al. [4] review urban water-demand forecasting and find
+that method complexity is a weak predictor of accuracy — simple models frequently match
+sophisticated ones once the right variables are present. Our finding that three model
+families are indistinguishable once `interior_clean` is parsed is the same observation at
+job scale.
+
+**Deciding under an uncertain capacity constraint.** Kleywegt and Papastavrou [5, 6]
+formalise the dynamic and stochastic knapsack, where item sizes are random and capacity may
+be violated. Han et al. [7] give a robust-optimisation treatment of the chance-constrained
+binary knapsack, replacing a hard capacity constraint with one that must hold at a stated
+probability. This is precisely our tank problem: our service-level formulation is a
+chance constraint solved empirically by resampling rather than analytically, and their work
+is why we report capacity at a service level rather than as a single number.
+
+**Why optimising on predictions can backfire.** Elmachtoub and Grigas [8] show that
+minimising prediction error is not the same as minimising decision cost, and that a
+better-fitting model can yield worse decisions once its output is fed to an optimiser. Our
+result that the exact knapsack doubles the tank-overflow rate relative to serving in booked
+order is an instance of exactly this, arrived at empirically.
+
+**Turning a prediction into a safe input.** Lei et al. [9] give distribution-free prediction
+intervals with finite-sample coverage from a held-out calibration split, and Koenker and
+Bassett [10] establish quantile regression as the alternative route to the same quantity. We
+use the split-calibration construction of [9]; our decision to plan against the interval's
+upper bound rather than its centre is the practical consequence.
+
+**Routing and capacity in service fleets.** Braekers et al. [11] classify the vehicle routing
+literature and note that most capacitated variants treat demand as deterministic. A7 supplies
+the per-job distribution that a stochastic-demand routing model would need, which is why the
+handover to A12 passes the distribution rather than the mean.
+
+**What we do not borrow.** No published study we found models water consumption at the level
+of an individual mobile wash job, and none reports the interaction structure we observe
+(dirtiness multiplying a vehicle-size base while an interior add-on contributes a constant).
+The per-job model here is built from the data rather than adapted from prior work.
+
+## 3. Data
 
 The Doorstep simulated dataset covers 1 January 2024 to 31 December 2025. This analysis uses
 three files: `jobs_done.csv` (39,302 completed jobs), `bookings.csv` for booking-time
@@ -62,7 +115,7 @@ The target is `water_litres`: mean 55.68 L, standard deviation 13.60 L, range 22
 bookings. The duplicate-row glitch planted in `bookings` for module A17 never reaches
 `jobs_done`, so this module is insulated from it.
 
-## 3. Exploratory findings that shaped the model
+## 4. Exploratory findings that shaped the model
 
 Four findings from `notebooks/01_exploration.ipynb` determined the modelling approach.
 
@@ -91,9 +144,9 @@ sd ≈ 3.0 L, and this holds equally for interior and exterior jobs. The spread 
 with the cell mean, so the noise is additive rather than proportional. This sets a hard
 floor on achievable error.
 
-## 4. Method
+## 5. Method
 
-### 4.1 Two prediction stages
+### 5.1 Two prediction stages
 
 Because dirtiness arrives late, the module trains two models on disjoint feature sets:
 
@@ -107,7 +160,7 @@ benchmarks well and fails in deployment. Post-job columns — `duration_minutes`
 `late_minutes`, `rating`, `revenue` — are outcomes rather than inputs and are excluded from
 both stages by construction, a property enforced by a test rather than by convention.
 
-### 4.2 Model families
+### 5.2 Model families
 
 Three families were compared at each stage against two baselines: a global mean, a
 per-vehicle-size group mean, a saturated cell mean, linear regression with the
@@ -115,10 +168,10 @@ size × dirtiness interaction, and gradient boosting.
 
 Every split-dependent number in this paper is the average over **ten seeds**, reported with
 its standard deviation. A single split would not distinguish these models from one another,
-as Section 5.1 shows. Seed 7, which matches the dataset generator, is among the ten and is
+as Section 6.1 shows. Seed 7, which matches the dataset generator, is among the ten and is
 the one used for the published per-scenario figures.
 
-### 4.3 Prediction intervals
+### 5.3 Prediction intervals
 
 Point estimates are inadequate for capacity planning, so each scenario carries a 90%
 interval from residual quantiles. These are calibrated on a split disjoint from both the
@@ -126,14 +179,14 @@ fitting and test splits — a 60/20/20 arrangement. Calibrating and measuring co
 same rows would report the nominal level back by construction rather than measuring
 anything.
 
-### 4.4 Tank capacity and refills
+### 5.4 Tank capacity and refills
 
 Capacity is evaluated by resampling observed per-job consumption 20,000 times and asking how
 often *n* jobs actually fit, rather than dividing capacity by the mean. Refills are counted
 by walking each crew-day in arrival order and topping up before any job the remaining water
 cannot cover, assuming each day starts with a full tank.
 
-### 4.5 Choosing the best set of jobs
+### 5.5 Choosing the best set of jobs
 
 Capacity analysis says how many jobs fit; it does not say *which*. Given a crew-day's
 bookings and a tank, the module selects a subset by three methods: serving in booked order
@@ -148,9 +201,9 @@ reach), the planning-time model's point estimate, and the upper end of its 90% i
 Selection uses the planning basis; feasibility is judged against actual consumption. The
 gap between the two is what a real plan is exposed to.
 
-## 5. Results
+## 6. Results
 
-### 5.1 Prediction accuracy
+### 6.1 Prediction accuracy
 
 Mean and standard deviation over ten seeds:
 
@@ -186,7 +239,7 @@ against a 0.90 nominal level.
 The gap between the two stages quantifies the cost of not knowing dirtiness: MAE roughly
 doubles, from 2.40 L to 5.90 L, and the interval widens from about ±5 L to about ±12 L.
 
-### 5.2 Tank capacity
+### 6.2 Tank capacity
 
 | Vehicle | Capacity | Mean-based | Actually fits | 90% | 95% | 99% |
 |---|---|---|---|---|---|---|
@@ -205,7 +258,7 @@ These capacities are stable: repeating the resampling under ten different seeds 
 same 2 / 4 / 5 jobs at every service level, so the figures are a property of the consumption
 distribution rather than of one draw.
 
-### 5.3 Refill frequency
+### 6.3 Refill frequency
 
 A single jobs-per-tank figure conceals the real constraint. Crews average 4.7 jobs and 262 L
 per day across 8,342 crew-days, with a 95th percentile of 544 L — well beyond every tank in
@@ -222,7 +275,7 @@ require two or more refills. For fleet planning this reframes tank size: the dif
 between a 200 L and a 350 L van is not simply jobs per fill but 0.88 against 0.26
 interruptions per working day, each costing travel time to a water source.
 
-### 5.4 The best set of jobs
+### 6.4 The best set of jobs
 
 Share of all jobs and all revenue captured, and the share of crew-days where the plan's
 actual consumption exceeded the tank:
@@ -263,7 +316,7 @@ That trade is the module's central practical claim: an optimiser fed point estim
 optimises the mean day and fails the bad one. The interval is not decoration on the
 prediction, it is what makes the optimiser safe to use.
 
-### 5.5 Sustainability comparison
+### 6.5 Sustainability comparison
 
 Doorstep draws no reclaimed water — a mobile van cannot recover what it sprays — so its
 55.7 L per job is entirely freshwater and compares directly against published freshwater
@@ -294,7 +347,7 @@ EPA publishes a 6 gal/min hose flow rate, not a per-wash total, and 60 gal repre
 rate over a ten-minute wash. The ICA figures come from an industry body reporting on its own
 sector.
 
-## 6. Limitations
+## 7. Limitations
 
 - **Simulated data.** Every figure describes a generated dataset with known structure. Real
   consumption would carry measurement error and operator variation that this data lacks by
@@ -318,7 +371,7 @@ sector.
   water against total applied. The table reports the definitional split rather than averaging
   across it.
 
-## 7. Conclusions
+## 8. Conclusions
 
 The module's most transferable finding is methodological. The largest available predictor was
 hidden inside a delimited string rather than exposed as a column, and the strongest predictor
@@ -342,7 +395,7 @@ quantity, and that any selection run against the interval's upper bound rather t
 centre. Downstream consumers should take the distribution rather than the mean;
 `INTEGRATION.md` records that contract.
 
-## 8. Reproducing
+## 9. Reproducing
 
 ```bash
 python -m venv .venv
@@ -352,17 +405,65 @@ python -m venv .venv
 ```
 
 Seed 7 throughout, matching the dataset generator. `src/train.py` regenerates every figure in
-sections 5.1 to 5.5 and appends each run to `experiments.csv`.
+sections 6.1 to 6.5 and appends each run to `experiments.csv`.
 
 ## References
 
-1. US Environmental Protection Agency. *WaterSense at Work: Best Management Practices for
-   Commercial and Institutional Facilities*, Section 5.5 Vehicle Washing. October 2012.
-   Figures attributed there to Chris Brown. Reclaim figures are freshwater make-up, not total
-   water applied.
-2. US Environmental Protection Agency, WaterSense. *Who Needs a Hose?* Publishes a 6 gal/min
-   garden-hose flow rate; the per-wash figure used here is derived from that rate.
-3. International Carwash Association. *Water Use, Evaporation, and Carryout in Professional
-   Carwashes*. 2018. Measurements at 12 sites (6 conveyor, 6 in-bay) during 2017.
-4. Doorstep simulated dataset, Track A, generated by `data/raw/generate_doorstep.py` with
-   seed 7.
+[1] I. Monney, E. A. Donkor, and R. Buamah, "Clean vehicles, polluted waters: empirical
+estimates of water consumption and pollution loads of the carwash industry," *Heliyon*,
+vol. 6, no. 5, e03952, 2020, doi: 10.1016/j.heliyon.2020.e03952.
+
+[2] K. Maciejewska and M. Reizer, "Evaluating the impacts of different car washing systems on
+carbon footprint: insights from Poland," *Sustainability*, vol. 17, no. 4, art. 1384, 2025,
+doi: 10.3390/su17041384.
+
+[3] R. N. Zaneti, R. Etchepare, and J. Rubio, "Car wash wastewater treatment and water reuse
+— a case study," *Water Science and Technology*, vol. 67, no. 1, pp. 82–88, 2013,
+doi: 10.2166/wst.2012.492.
+
+[4] E. A. Donkor, T. A. Mazzuchi, R. Soyer, and J. A. Roberson, "Urban water demand
+forecasting: review of methods and models," *Journal of Water Resources Planning and
+Management*, vol. 140, no. 2, pp. 146–159, 2014,
+doi: 10.1061/(ASCE)WR.1943-5452.0000314.
+
+[5] A. J. Kleywegt and J. D. Papastavrou, "The dynamic and stochastic knapsack problem,"
+*Operations Research*, vol. 46, no. 1, pp. 17–35, 1998, doi: 10.1287/opre.46.1.17.
+
+[6] J. D. Papastavrou, S. Rajagopalan, and A. J. Kleywegt, "The dynamic and stochastic
+knapsack problem with deadlines," *Management Science*, vol. 42, no. 12, pp. 1706–1718,
+1996, doi: 10.1287/mnsc.42.12.1706.
+
+[7] J. Han, K. Lee, C. Lee, K.-S. Choi, and S. Park, "Robust optimization approach for a
+chance-constrained binary knapsack problem," *Mathematical Programming*, vol. 157, no. 1,
+pp. 277–296, 2015, doi: 10.1007/s10107-015-0931-0.
+
+[8] A. N. Elmachtoub and P. Grigas, "Smart 'predict, then optimize'," *Management Science*,
+vol. 68, no. 1, pp. 9–26, 2022, doi: 10.1287/mnsc.2020.3922.
+
+[9] J. Lei, M. G'Sell, A. Rinaldo, R. J. Tibshirani, and L. Wasserman, "Distribution-free
+predictive inference for regression," *Journal of the American Statistical Association*,
+vol. 113, no. 523, pp. 1094–1111, 2018, doi: 10.1080/01621459.2017.1307116.
+
+[10] R. Koenker and G. Bassett, "Regression quantiles," *Econometrica*, vol. 46, no. 1,
+pp. 33–50, 1978, doi: 10.2307/1913643.
+
+[11] K. Braekers, K. Ramaekers, and I. Van Nieuwenhuyse, "The vehicle routing problem: state
+of the art classification and review," *Computers & Industrial Engineering*, vol. 99,
+pp. 300–313, 2016, doi: 10.1016/j.cie.2015.12.007.
+
+### Data and non-academic sources
+
+[12] US Environmental Protection Agency, *WaterSense at Work: Best Management Practices for
+Commercial and Institutional Facilities*, Section 5.5 Vehicle Washing, October 2012. Figures
+attributed there to Chris Brown. Reclaim figures are freshwater make-up, not total water
+applied.
+
+[13] US Environmental Protection Agency, WaterSense, *Who Needs a Hose?* Publishes a
+6 gal/min garden-hose flow rate; the per-wash figure used here is derived from that rate.
+
+[14] International Carwash Association, *Water Use, Evaporation, and Carryout in Professional
+Carwashes*, 2018. Measurements at 12 sites (6 conveyor, 6 in-bay) during 2017. An industry
+body reporting on its own sector.
+
+[15] Doorstep simulated dataset, Track A, generated by `data/raw/generate_doorstep.py` with
+seed 7.
