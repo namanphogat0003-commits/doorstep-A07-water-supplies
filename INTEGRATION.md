@@ -1,113 +1,109 @@
-# A7 — Water and Supplies: Integration
+# Integration note — A7 Water and Supplies
 
-What this module hands to the rest of Track A, and how to consume it correctly.
+Regenerate everything below with `python src/train.py` from the repository root.
 
-All figures below are computed from the Doorstep simulated dataset (39,302 completed jobs,
-1 Jan 2024 – 31 Dec 2025) by `src/train.py`. Regenerate everything with:
+## What I produce
 
-```bash
-python src/train.py
-```
+All files live in `results/`, are rewritten on every run, and are reproducible from
+`data/raw/`. Column definitions are in `results/README.md`.
 
-## What A7 provides
-
-| File | Grain | Answers |
+| File | One row is | Key columns and units |
 |---|---|---|
-| `results/consumption_model.csv` | one scenario | how much water will this job take |
-| `results/tank_capacity.csv` | one vehicle | how many jobs fit in one tank |
-| `results/refill_planning.csv` | one vehicle | how often a crew must refill during a day |
-| `results/sustainability.csv` | one benchmark | how Doorstep compares with conventional washing |
+| `consumption_model.csv` | one scenario | `predicted_litres`, `pi_low_litres`, `pi_high_litres` (litres, 90% interval); `n_observed`, `observed_mean_litres`, `observed_sd_litres` |
+| `tank_capacity.csv` | one vehicle | `max_jobs_at_90pct` / `_95pct` / `_99pct` (whole jobs), `mean_based_jobs`, `p_mean_based_fits` |
+| `refill_planning.csv` | one vehicle | `mean_refills_per_day`, `p95_refills_per_day`, `pct_days_no_refill` and siblings (percent of crew-days) |
+| `tank_plan.csv` | one tank × basis × method | `jobs_served_pct`, `revenue_captured_pct`, `overflow_pct_of_crew_days` |
+| `sustainability.csv` | one published benchmark | `benchmark_litres_per_wash`, `doorstep_pct_of_benchmark`, `source` |
 
-## consumption_model.csv
+**Update cadence:** on demand. There is no scheduled job — the figures change only when
+`data/raw/` changes or the pipeline does.
+
+### Picking a row from consumption_model.csv
 
 Two prediction stages, because `dirtiness_level` is only observed when the crew arrives.
-Pick the stage by **what is known at the moment of the call**:
+Pick by what is known at the moment of the call:
 
 | Stage | Known inputs | Use when | Test MAE (10 seeds) |
 |---|---|---|---|
 | `planning` | `vehicle_size`, `interior_clean` | routing, scheduling, quoting — anything before arrival | 5.90 ± 0.04 L |
 | `onsite` | the above plus `dirtiness_level` | the crew is at the vehicle | 2.40 ± 0.01 L |
 
-Join on the columns `vehicle_size`, `interior_clean` and, for `onsite`, `dirtiness_level`.
+Join on `vehicle_size`, `interior_clean` and, for `onsite`, `dirtiness_level`.
 `dirtiness_level` is blank on `planning` rows.
 
-`interior_clean` is **not** `slot_type`. Derive it from `bookings.items`, which is a
-`|`-separated list:
+`interior_clean` is **not** `slot_type`. Derive it from `bookings.items`:
 
 ```python
 interior_clean = bookings["items"].str.contains("interior_clean", na=False).astype(int)
 ```
 
-It is present on 27.9% of jobs, sold across every slot type, and adds +18.0 L. A consumer
-that keys off `slot_type` will miss it entirely — all five slot types average 54.9–55.8 L.
+It is on 27.9% of jobs, sold across every slot type, and adds +18.0 L. All five slot types
+average 54.9–55.8 L, so a consumer keying off `slot_type` will miss the effect entirely.
 
-Each row carries `predicted_litres` with `pi_low_litres` / `pi_high_litres` at
-`interval_level` 0.90, plus `n_observed`, `observed_mean_litres` and `observed_sd_litres`
-for the cell. **Use the interval, not just the point estimate.** At planning time the band
-is roughly ±12 L because dirtiness is unresolved; on site it narrows to about ±5 L.
+**Use the interval, not just the point estimate.** At planning time the band is roughly
+±12 L because dirtiness is unresolved; on site it narrows to about ±5 L.
 
-## tank_capacity.csv and refill_planning.csv
+## What I consume
 
-Tank sizes come from `data/raw/vehicles.csv`: small_van 200 L, ev_van 280 L, large_van 350 L.
+Only `data/raw/`, which is immutable and supplied by faculty. No other team's output is an
+input to A7, so nothing upstream can block this module.
 
-Maximum jobs per tank, by service level:
+| File | Columns used | What I assume |
+|---|---|---|
+| `jobs_done.csv` | `booking_id`, `date`, `crew_id`, `arrival_time`, `water_litres`, `dirtiness_level`, `revenue` | `water_litres` is litres actually used on that job; `dirtiness_level` is recorded on arrival, not booked |
+| `bookings.csv` | `booking_id`, `items`, `vehicle_size`, `total_price` | `items` is a `\|`-separated list containing `interior_clean` where sold |
+| `vehicles.csv` | `vehicle_type`, `capacity_litres` | `capacity_litres` is usable tank volume, not gross |
 
-| Vehicle | 90% | 95% | 99% | mean-based |
-|---|---|---|---|---|
-| small_van (200 L) | 3 | 2 | 2 | 3 — fits only 91% of the time |
-| ev_van (280 L) | 4 | 4 | 3 | 5 — fits only 53% of the time |
-| large_van (350 L) | 5 | 5 | 4 | 6 — fits only 70% of the time |
+## Assumptions that could break
 
-**Quote the service level with the number.** Dividing capacity by the 55.7 L mean ignores
-the spread of per-job consumption and overstates what a tank actually covers.
+1. **`dirtiness_level` is not knowable before arrival.** It is uncorrelated with rain
+   (−0.007) and temperature (+0.001), flat across months, and the same customer varies more
+   than customers differ from one another. If a future module (A14, photo check) can predict
+   dirt level from a booking photo, the planning-time model becomes obsolete and its error
+   roughly halves, from 5.90 L to 2.40 L. **That is the single change that would most improve
+   A7.**
+2. **Tank capacity is usable volume.** If `capacity_litres` is gross and usable volume is
+   lower, every jobs-per-tank figure drops. A 10% reduction moves the 95% figures from
+   2 / 4 / 5 to roughly 2 / 3 / 4.
+3. **Crews start each day with a full tank.** All refill counts assume this. If vans start
+   partly full, refills rise and `pct_days_no_refill` is optimistic.
+4. **Water for travel and crew use is zero.** Only per-job consumption is modelled. Any
+   fixed daily overhead shifts every crew-day figure up by that amount.
+5. **Job selection assumes a crew-day's bookings are known in advance and free to drop.**
+   Refusing a confirmed booking carries a customer cost that is not priced, so
+   `tank_plan.csv` is an upper bound on what selection can achieve.
+6. **The data is simulated.** The uniform ~3 L within-cell noise is a property of the
+   generator. Real jobs would likely be heteroscedastic, which would widen intervals
+   unevenly and change the service-level figures.
 
-One tank does not cover a working day. Crews average 4.7 jobs and 262 L per day (p95 544 L,
-max 1,151 L over 8,342 crew-days), so refills are part of normal operation, not an
-exception:
+## Tested against
 
-| Vehicle | mean refills/day | p95 | days needing none | one | two or more |
-|---|---|---|---|---|---|
-| small_van | 0.88 | 3 | 38.9% | 40.3% | 20.9% |
-| ev_van | 0.45 | 2 | 61.3% | 33.0% | 5.7% |
-| large_van | 0.26 | 1 | 75.8% | 22.9% | 1.3% |
+**Nothing yet — this is the honest state.**
 
-Refills are counted by walking each crew-day in arrival order and topping up before any job
-the remaining water cannot cover, starting each day full.
+| Team | Status |
+|---|---|
+| A12 (Fleet strategy) | Not tested. A12 consumes A7's output; their `fleet_options.csv` format has not been received, and A7's output has not been run through their code. |
 
-## For A12 (fleet trade-offs)
+A7 consumes no other team's file, so there is no upstream integration to test. The
+outstanding work is confirming that A12 can read `consumption_model.csv` and
+`refill_planning.csv` as produced. Until that happens this section stays as it is; a
+"tested" claim here with no test behind it would be worse than an empty one.
 
-Take the **distribution**, not the mean. The relevant inputs are `observed_sd_litres` per
-scenario in `consumption_model.csv`, and the refill frequency above — a smaller tank is not
-simply "fewer jobs per fill", it is a recurring interruption to the working day that costs
-travel time to a water source. The gap between small_van and large_van is 0.88 against 0.26
-refills per crew-day.
+## Known incompatibilities
 
-## Sustainability claims
-
-Any module or marketing-facing team quoting A7 on sustainability should quote it
-accurately. At 55.7 L per job Doorstep uses roughly a quarter of what home hose washing
-and unreclaimed facilities use, and about half the measured conveyor fleet average — but
-it uses nearly **twice** what a reclaim-equipped tunnel uses per car, because a mobile van
-cannot recover its water. Claim the comparison against home washing and typical operating
-facilities; do not claim Doorstep beats a modern reclaim tunnel. Full table, per-benchmark
-figures and citations are in `results/sustainability.csv` and `results/README.md`.
-
-## Upstream dependencies
-
-Reads `data/raw/jobs_done.csv`, `bookings.csv` and `vehicles.csv` only. `data/raw` is
-immutable. If the dataset is reseeded, every figure in this document changes and
-`src/train.py` must be re-run.
-
-## Assumptions and limits
-
-- **Simulated data.** Cite as "Doorstep simulated dataset, Track A". Not real operations.
-- **`dirtiness_level` cannot be predicted at booking time.** It is uncorrelated with rain
-  (−0.007) and temperature (+0.001), flat across months, and within-customer variation
-  (sd 0.89) swamps between-customer variation (sd 0.28). Do not ask A7 for an on-site-grade
-  figure before arrival, and do not feed `dirtiness_level` into a planning-time model — that
-  is leakage.
-- **Post-job columns are excluded** — `duration_minutes`, `late_minutes`, `rating` and
-  `revenue` are outcomes, not features.
-- **Water for travel or crew use is not modelled.** Figures cover per-job consumption only.
-- **Refill counts assume a full tank at the start of each crew-day** and that a refill
-  restores full capacity.
+1. **The ground-rules column contract does not match the supplied data.** Rule 1 specifies
+   `staff_id`, `travel_km`, `requested_date` and `requested_slot`; the actual dataset uses
+   `crew_id`, `distance_km`, `date` and `slot_time`, and `jobs_done.csv` carries
+   `dirtiness_level` and `revenue`, which the rule does not list at all. A7 follows the
+   supplied `data/raw/DATA_DICTIONARY.md`, since that is what the data actually is. Any team
+   that coded against the guidebook column names rather than the dataset will not join
+   cleanly to A7's output, and the mismatch is in the shared contract rather than in either
+   module.
+2. **A7 reports intervals; most consumers expect point estimates.** `consumption_model.csv`
+   deliberately carries `pi_low_litres` and `pi_high_litres`. A consumer that reads only
+   `predicted_litres` will plan to the mean and, per our own optimisation results, roughly
+   double its rate of running a tank dry. This is a real incompatibility of expectations,
+   not a formatting one.
+3. **No per-booking output.** A7 publishes a scenario lookup, not one row per booking. A team
+   wanting a per-`booking_id` prediction must join on the scenario columns themselves. Say so
+   and we will publish a per-booking file instead.
