@@ -20,3 +20,8 @@ data/processed/*
 Thumbs.db
 .vscode/
 .idea/
+
+# Node (slide generator only)
+node_modules/
+package-lock.json
+package.json
