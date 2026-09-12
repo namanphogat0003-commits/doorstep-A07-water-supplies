@@ -11,6 +11,7 @@ Outputs produced by the A7 pipeline. Everything here is regenerated from
 | `consumption_model.csv` | required A7 deliverable | produced by `src/train.py` |
 | `tank_capacity.csv` | required A7 deliverable (max jobs per tank) | produced by `src/train.py` |
 | `refill_planning.csv` | refill frequency per crew-day | produced by `src/train.py` |
+| `sustainability.csv` | comparison with conventional car washing | produced by `src/train.py` |
 
 Regenerate both with `python src/train.py` from the repository root. That also appends
 one row per model run to `experiments.csv`.
@@ -40,6 +41,46 @@ Mid-day refills per crew-day per vehicle, counted by walking each crew-day in ar
 order and topping up before any job the remaining water cannot cover. A single
 jobs-per-tank number hides the real constraint: crews average 262 L a day against tanks
 of 200–350 L, so 61% / 39% / 24% of crew-days need at least one refill.
+
+## sustainability.csv
+
+Doorstep's measured 55.7 L per job against published figures for conventional car
+washing. Benchmarks are stored in `src/sustainability.py` in their original units
+(US gallons per vehicle) with their source, and converted at 3.785411784 L/gal.
+
+Doorstep draws no reclaimed water, so its 55.7 L is entirely freshwater and compares
+directly against the freshwater columns below.
+
+| Compared with | L per wash | Doorstep is |
+|---|---|---|
+| friction conveyor, no reclaim | 249.1 | 22% of it |
+| home hose, left running | 227.1 | 25% of it |
+| in-bay automatic, no reclaim | 227.1 | 25% of it |
+| in-bay automatic, measured fleet | 169.6 | 33% of it |
+| conveyor, measured fleet | 113.6 | 49% of it |
+| frictionless conveyor with reclaim | 63.6 | 88% of it |
+| self-service wand | 56.8 | 98% of it — level |
+| in-bay automatic with reclaim | 30.3 | 184% of it — worse |
+| friction conveyor with reclaim | 29.5 | 189% of it — worse |
+
+**The honest headline is not "mobile washing saves water".** It beats home washing and
+typical operating car washes by a wide margin, and lands level with a self-service bay,
+but a reclaim-equipped tunnel uses about half what Doorstep does per car. Mobile washing
+cannot reclaim — the water leaves with the van — so that gap is structural, not an
+operations problem to be tuned away. The defensible claims are against home washing and
+against unreclaimed or typical operating facilities.
+
+Sources, for citation in the paper:
+
+- US EPA, *WaterSense at Work: Best Management Practices for Commercial and Institutional
+  Facilities*, Section 5.5 Vehicle Washing, October 2012. Figures attributed there to
+  Chris Brown. Reclaim figures are freshwater make-up, not total water applied.
+- US EPA WaterSense, *Who Needs a Hose?* — publishes a 6 gal/min hose flow rate, not a
+  per-wash total; the 60 gal figure here is that rate over a ten-minute wash and is
+  labelled as derived.
+- International Carwash Association, *Water Use, Evaporation, and Carryout in Professional
+  Carwashes*, 2018, measuring 12 sites (6 conveyor, 6 in-bay) during 2017. Note this is an
+  industry body reporting on its own sector.
 
 ## Model selection
 

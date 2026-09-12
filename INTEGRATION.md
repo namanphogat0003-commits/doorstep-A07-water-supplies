@@ -16,6 +16,7 @@ python src/train.py
 | `results/consumption_model.csv` | one scenario | how much water will this job take |
 | `results/tank_capacity.csv` | one vehicle | how many jobs fit in one tank |
 | `results/refill_planning.csv` | one vehicle | how often a crew must refill during a day |
+| `results/sustainability.csv` | one benchmark | how Doorstep compares with conventional washing |
 
 ## consumption_model.csv
 
@@ -80,6 +81,16 @@ scenario in `consumption_model.csv`, and the refill frequency above — a smalle
 simply "fewer jobs per fill", it is a recurring interruption to the working day that costs
 travel time to a water source. The gap between small_van and large_van is 0.88 against 0.26
 refills per crew-day.
+
+## Sustainability claims
+
+Any module or marketing-facing team quoting A7 on sustainability should quote it
+accurately. At 55.7 L per job Doorstep uses roughly a quarter of what home hose washing
+and unreclaimed facilities use, and about half the measured conveyor fleet average — but
+it uses nearly **twice** what a reclaim-equipped tunnel uses per car, because a mobile van
+cannot recover its water. Claim the comparison against home washing and typical operating
+facilities; do not claim Doorstep beats a modern reclaim tunnel. Full table, per-benchmark
+figures and citations are in `results/sustainability.csv` and `results/README.md`.
 
 ## Upstream dependencies
 

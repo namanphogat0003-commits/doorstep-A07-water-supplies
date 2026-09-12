@@ -29,6 +29,7 @@ from evaluate import (
     regression_metrics,
 )
 from model import MODEL_ORDER, IntervalRegressor, build_model
+from sustainability import sustainability_comparison
 
 TEST_SIZE = 0.2
 CALIBRATION_SIZE = 0.25  # of the training split, giving a 60/20/20 fit/calibrate/test
@@ -50,6 +51,7 @@ EXPERIMENTS = ROOT / "experiments.csv"
 CONSUMPTION_MODEL = RESULTS / "consumption_model.csv"
 TANK_CAPACITY = RESULTS / "tank_capacity.csv"
 REFILL_PLANNING = RESULTS / "refill_planning.csv"
+SUSTAINABILITY = RESULTS / "sustainability.csv"
 
 
 def run_experiments(df, idx_train, idx_test):
@@ -210,9 +212,25 @@ def main():
         f"| p95 {loads.litres.quantile(0.95):.0f} L | max {loads.litres.max():.0f} L"
     )
 
+    sustainability = sustainability_comparison(df)
+    sustainability.to_csv(SUSTAINABILITY, index=False, encoding="utf-8")
+    print("\nWater use against published benchmarks (L per wash)")
+    print(
+        sustainability[
+            [
+                "benchmark",
+                "reclaim",
+                "benchmark_litres_per_wash",
+                "doorstep_pct_of_benchmark",
+                "source",
+            ]
+        ].to_string(index=False)
+    )
+
     print(f"\nwrote {CONSUMPTION_MODEL.relative_to(ROOT)} ({len(consumption_model)} rows)")
     print(f"wrote {TANK_CAPACITY.relative_to(ROOT)} ({len(tanks)} rows)")
     print(f"wrote {REFILL_PLANNING.relative_to(ROOT)} ({len(refills)} rows)")
+    print(f"wrote {SUSTAINABILITY.relative_to(ROOT)} ({len(sustainability)} rows)")
     print(f"logged {len(experiments)} runs to {EXPERIMENTS.relative_to(ROOT)}")
 
 
