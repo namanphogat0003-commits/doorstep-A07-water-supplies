@@ -133,13 +133,13 @@ def feasibility(df, vehicles):
     finish(fig, "tank_feasibility.png")
 
 
-def crew_day_load(df, vehicles):
-    """For the dark slide: light ink on a transparent ground."""
+def crew_day_load(df, vehicles, dark=True):
+    """Dark variant for the slide, light variant for the paper."""
     loads = crew_day_loads(df)["litres"]
-    light, faint = "#E6F0F4", "#3C5A67"
+    light = "#E6F0F4" if dark else INK
 
     fig, ax = plt.subplots(figsize=(7.4, 2.5))
-    ax.hist(loads, bins=44, color="#1F6E86", edgecolor="none")
+    ax.hist(loads, bins=44, color="#1F6E86" if dark else BRAND, edgecolor="none")
     for (_, v), c in zip(vehicles.iterrows(), [ALERT, "#3E97C4", SUPPORT]):
         ax.axvline(v["capacity_litres"], color=c, linewidth=2.0)
         ax.text(v["capacity_litres"], ax.get_ylim()[1] * 0.94, f" {v['capacity_litres']} L",
@@ -154,7 +154,7 @@ def crew_day_load(df, vehicles):
     ax.xaxis.label.set_color(light)
     for t in ax.get_xticklabels():
         t.set_color(light)
-    finish(fig, "crew_day_load.png")
+    finish(fig, "crew_day_load.png" if dark else "crew_day_load_light.png")
 
 
 def model_spread():
@@ -182,5 +182,6 @@ if __name__ == "__main__":
     functional_form(jobs)
     vehicles = load_vehicles()
     feasibility(jobs, vehicles)
-    crew_day_load(jobs, vehicles)
+    crew_day_load(jobs, vehicles, dark=True)
+    crew_day_load(jobs, vehicles, dark=False)
     model_spread()
