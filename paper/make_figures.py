@@ -19,8 +19,10 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from data_loader import SEED, TARGET, load_jobs, load_vehicles  # noqa: E402
-from evaluate import tank_feasibility  # noqa: E402
+import pandas as pd  # noqa: E402
+
+from data_loader import RESULTS, SEED, TARGET, load_jobs, load_vehicles  # noqa: E402
+from evaluate import crew_day_loads, tank_feasibility  # noqa: E402
 
 OUT = Path(__file__).resolve().parent / "figures"
 OUT.mkdir(exist_ok=True)
@@ -131,8 +133,54 @@ def feasibility(df, vehicles):
     finish(fig, "tank_feasibility.png")
 
 
+def crew_day_load(df, vehicles):
+    """For the dark slide: light ink on a transparent ground."""
+    loads = crew_day_loads(df)["litres"]
+    light, faint = "#E6F0F4", "#3C5A67"
+
+    fig, ax = plt.subplots(figsize=(7.4, 2.5))
+    ax.hist(loads, bins=44, color="#1F6E86", edgecolor="none")
+    for (_, v), c in zip(vehicles.iterrows(), [ALERT, "#3E97C4", SUPPORT]):
+        ax.axvline(v["capacity_litres"], color=c, linewidth=2.0)
+        ax.text(v["capacity_litres"], ax.get_ylim()[1] * 0.94, f" {v['capacity_litres']} L",
+                color=c, fontsize=10, va="top")
+    ax.set_xlim(0, 900)
+    ax.set_xlabel("litres drawn in one crew-day", color=light)
+    ax.set_yticks([])
+    ax.tick_params(colors=light)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.grid(False)
+    ax.xaxis.label.set_color(light)
+    for t in ax.get_xticklabels():
+        t.set_color(light)
+    finish(fig, "crew_day_load.png")
+
+
+def model_spread():
+    """Mean +/- sd for the three planning-stage families."""
+    cmp = pd.read_csv(RESULTS / "model_comparison.csv")
+    rows = cmp[cmp.stage == "planning"].reset_index(drop=True)
+    names = {"size_mean": "cell mean", "linear": "linear + interaction", "gbm": "gradient boosting"}
+
+    fig, ax = plt.subplots(figsize=(7.8, 1.75))
+    ys = range(len(rows))
+    ax.errorbar(rows.mae_mean, ys, xerr=rows.mae_std, fmt="o", markersize=9,
+                color=BRAND, ecolor=SUPPORT, elinewidth=3, capsize=0, alpha=0.95)
+    ax.set_yticks(list(ys))
+    ax.set_yticklabels([names.get(m, m) for m in rows.model])
+    ax.set_ylim(-0.6, len(rows) - 0.4)
+    ax.set_xlabel("mean absolute error, litres  (bars are ±1 sd over ten seeds)")
+    ax.yaxis.grid(False)
+    ax.invert_yaxis()
+    finish(fig, "model_spread.png")
+
+
 if __name__ == "__main__":
     jobs = load_jobs()
     slot_vs_addon(jobs)
     functional_form(jobs)
-    feasibility(jobs, load_vehicles())
+    vehicles = load_vehicles()
+    feasibility(jobs, vehicles)
+    crew_day_load(jobs, vehicles)
+    model_spread()

@@ -54,7 +54,7 @@ pres.title = "A7 - Water and Supplies";
 /* ── text metrics ───────────────────────────────────────────────────────── */
 // Average advance width as a fraction of the em, measured for these two faces.
 // Deliberately generous so estimated height is never under the truth.
-const EM_FRACTION = { [BODY]: 0.50, [HEAD]: 0.53 };
+const EM_FRACTION = { [BODY]: 0.468, [HEAD]: 0.484 };
 
 function lineCount(text, widthIn, size, face, tracking) {
   const em = size / 72;
@@ -296,11 +296,12 @@ function statRow(slide, y, entries, onDark) {
   const s = slideDark("The constraint", "Run out at job six and the rest of the day is cancelled");
   flow(s, 0, 11).text("Capacity, not demand, is what bounds a crew's day.",
     { size: LEAD, color: ON_DARK });
-  statRow(s, 4.05, [
+  statRow(s, 2.95, [
     { value: "262 L", label: "average drawn per crew-day", color: SUPPORT },
     { value: "200–350 L", label: "tank capacity across the fleet", color: SUPPORT },
     { value: "61%", label: "of crew-days exceed the small van", color: ALERT },
   ], true);
+  flow(s, 0, 12, 4.4).image(path.join(FIGS, "crew_day_load.png"), 2.0);
   s.addNotes(
     "Naman. The three numbers do the work. Crews draw 262 litres a day, tanks hold 200 to " +
     "350, so on the small van six days in ten need a refill. That is the motivation: a " +
@@ -373,6 +374,10 @@ function statRow(slide, y, entries, onDark) {
       { text: "2.40 L", size: 36, bold: true, color: SUPPORT, face: HEAD, after: 0.12 },
       { text: "mean absolute error — once the crew has seen the car", size: MICRO, color: MUTED },
     ]);
+  flow(s, 0, 12, 6.28).text(
+    "A test enforces the split: planning features never include dirtiness, and no post-job " +
+    "column reaches either stage.", { size: MICRO, color: MUTED, after: 0 });
+  footer(s, "Held-out test split · mean of ten seeds · results/consumption_model.csv");
   s.addNotes(
     "Vansh, and do not rush this — the whole module rests on it. Using dirtiness at booking " +
     "time would be leakage: the model benchmarks well and fails in deployment. So two models " +
@@ -427,13 +432,14 @@ function statRow(slide, y, entries, onDark) {
   top.card([
     { text: "The noise between splits is about forty times the gap between models.",
       size: ACCENT, bold: true, color: BRAND, face: HEAD },
-  ], { after: 0.3 });
+  ], { after: 0.24 });
 
   const y = top.y;
-  flow(s, 0, 6, y).text(
-    "From one split, the ranking would be an artefact of which rows landed in the test set.");
-  flow(s, 6, 6, y).text(
-    "We take the simplest family within 1% of the best — the cell mean — at both stages.");
+  flow(s, 0, 7, y).image(path.join(FIGS, "model_spread.png"), 1.75);
+  flow(s, 7, 5, y).text(
+    "From one split the ranking would be an artefact. We take the simplest family within " +
+    "1% of the best — the cell mean.", { size: MICRO, color: MUTED });
+  footer(s, "Ten seeds, planning stage · results/model_comparison.csv");
   s.addNotes(
     "Vansh. The honesty slide, and the guidebook says explicitly that it scores. We are not " +
     "claiming a win; we are claiming we cannot tell the models apart, and we can only say " +
