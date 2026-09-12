@@ -25,3 +25,6 @@ Thumbs.db
 node_modules/
 package-lock.json
 package.json
+
+# Overleaf bundle, rebuilt from paper/ on demand
+paper/A7_overleaf.zip
