@@ -23,10 +23,10 @@ python src/train.py
 Two prediction stages, because `dirtiness_level` is only observed when the crew arrives.
 Pick the stage by **what is known at the moment of the call**:
 
-| Stage | Known inputs | Use when | Test MAE |
+| Stage | Known inputs | Use when | Test MAE (10 seeds) |
 |---|---|---|---|
-| `planning` | `vehicle_size`, `interior_clean` | routing, scheduling, quoting — anything before arrival | 5.93 L |
-| `onsite` | the above plus `dirtiness_level` | the crew is at the vehicle | 2.40 L |
+| `planning` | `vehicle_size`, `interior_clean` | routing, scheduling, quoting — anything before arrival | 5.90 ± 0.04 L |
+| `onsite` | the above plus `dirtiness_level` | the crew is at the vehicle | 2.40 ± 0.01 L |
 
 Join on the columns `vehicle_size`, `interior_clean` and, for `onsite`, `dirtiness_level`.
 `dirtiness_level` is blank on `planning` rows.

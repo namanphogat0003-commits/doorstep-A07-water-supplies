@@ -13,6 +13,7 @@ Outputs produced by the A7 pipeline. Everything here is regenerated from
 | `refill_planning.csv` | refill frequency per crew-day | produced by `src/train.py` |
 | `sustainability.csv` | comparison with conventional car washing | produced by `src/train.py` |
 | `tank_plan.csv` | best set of jobs to fit one tank | produced by `src/train.py` |
+| `model_comparison.csv` | ten-seed model comparison with spread | produced by `src/train.py` |
 
 Regenerate both with `python src/train.py` from the repository root. That also appends
 one row per model run to `experiments.csv`.
@@ -122,13 +123,31 @@ plan. Planning on the interval's upper bound removes overflow entirely (0.0%) at
 about 10 points of jobs and revenue. That trade is the reason the model reports an interval
 rather than a point.
 
-## Model selection
+## model_comparison.csv and model selection
 
-All three families (cell mean, linear with size x dirtiness interaction, gradient boosting)
-land within ~0.001 L of each other at both stages, so `src/train.py` selects the simplest
-family within 1% of the best MAE rather than by raw argmin. Both stages select the cell
-mean. Held-out test MAE: 5.93 L planning, 2.40 L on-site, against an 11.23 L global-mean
-baseline.
+Every model is run under **ten seeds** (0-9), each reshuffling the 60/20/20
+fit/calibrate/test split. One row per stage and model, with `mae`, `rmse` and `r2` as
+`_mean`, `_std`, `_min`, `_max`.
+
+| Stage | Model | MAE (L), mean ± sd |
+|---|---|---|
+| baseline | global mean | 11.152 ± 0.062 |
+| baseline | per-vehicle-size mean | 8.922 ± 0.067 |
+| planning | cell mean | 5.897 ± 0.038 |
+| planning | linear | 5.897 ± 0.038 |
+| planning | gradient boosting | 5.896 ± 0.038 |
+| on-site | cell mean | 2.397 ± 0.014 |
+| on-site | linear | 2.397 ± 0.015 |
+| on-site | gradient boosting | 2.397 ± 0.014 |
+
+The three families differ by 0.001 L while the seed-to-seed spread is 0.038 L — the noise
+between splits is about forty times the gap between models, so they are not distinguishable
+and a ranking from a single split would be an artefact. `src/train.py` therefore selects the
+simplest family within 1% of the best seed-averaged MAE rather than by raw argmin; both
+stages select the cell mean.
+
+Interval coverage is 0.8985 ± 0.0053 (planning) and 0.9000 ± 0.0052 (on-site) against a
+0.90 nominal level. The jobs-per-tank figures are identical under all ten resampling seeds.
 
 ## plots/
 

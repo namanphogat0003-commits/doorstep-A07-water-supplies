@@ -17,8 +17,9 @@ and converts those predictions into operational capacity figures. We find that t
 that drives consumption is not the service tier a customer books but an add-on buried inside
 a delimited item list, and that the strongest single predictor — how dirty the car is — is
 unobservable until the crew arrives. That forces two separate models rather than one. A
-saturated cell-mean model reaches 5.93 L mean absolute error at booking time and 2.40 L on
-site, against an 11.23 L baseline. Translating this into tank planning, we show that the
+saturated cell-mean model reaches 5.90 ± 0.04 L mean absolute error at booking time and
+2.40 ± 0.01 L on site over ten seeds, against an 11.15 ± 0.06 L baseline. Translating this
+into tank planning, we show that the
 conventional arithmetic of dividing tank capacity by mean consumption overstates capacity
 badly: the resulting figures hold only 53–91% of the time. At a 95% service level the
 defensible capacities are 2, 4 and 5 jobs for the 200, 280 and 350 L vans. Because crews
@@ -108,9 +109,14 @@ both stages by construction, a property enforced by a test rather than by conven
 
 ### 4.2 Model families
 
-Three families were compared at each stage against two baselines, all on one shared 80/20
-split with a fixed seed: a global mean, a per-vehicle-size group mean, a saturated cell mean,
-linear regression with the size × dirtiness interaction, and gradient boosting.
+Three families were compared at each stage against two baselines: a global mean, a
+per-vehicle-size group mean, a saturated cell mean, linear regression with the
+size × dirtiness interaction, and gradient boosting.
+
+Every split-dependent number in this paper is the average over **ten seeds**, reported with
+its standard deviation. A single split would not distinguish these models from one another,
+as Section 5.1 shows. Seed 7, which matches the dataset generator, is among the ten and is
+the one used for the published per-scenario figures.
 
 ### 4.3 Prediction intervals
 
@@ -146,18 +152,24 @@ gap between the two is what a real plan is exposed to.
 
 ### 5.1 Prediction accuracy
 
+Mean and standard deviation over ten seeds:
+
 | Stage | Model | MAE (L) | RMSE (L) | R² |
 |---|---|---|---|---|
-| Baseline | global mean | 11.23 | 13.78 | −0.000 |
-| Baseline | per-vehicle-size mean | 8.98 | 11.00 | 0.362 |
-| Planning | cell mean | **5.93** | 7.32 | **0.718** |
-| Planning | linear | 5.93 | 7.32 | 0.718 |
-| Planning | gradient boosting | 5.93 | 7.32 | 0.718 |
-| On-site | cell mean | **2.40** | 3.00 | **0.952** |
-| On-site | linear | 2.40 | 3.00 | 0.952 |
-| On-site | gradient boosting | 2.40 | 3.00 | 0.952 |
+| Baseline | global mean | 11.152 ± 0.062 | 13.626 ± 0.079 | −0.000 ± 0.000 |
+| Baseline | per-vehicle-size mean | 8.922 ± 0.067 | 10.914 ± 0.067 | 0.358 ± 0.006 |
+| Planning | cell mean | **5.897 ± 0.038** | 7.276 ± 0.043 | **0.715 ± 0.004** |
+| Planning | linear | 5.897 ± 0.038 | 7.277 ± 0.043 | 0.715 ± 0.004 |
+| Planning | gradient boosting | 5.896 ± 0.038 | 7.277 ± 0.043 | 0.715 ± 0.004 |
+| On-site | cell mean | **2.397 ± 0.014** | 2.997 ± 0.016 | **0.952 ± 0.001** |
+| On-site | linear | 2.397 ± 0.015 | 2.996 ± 0.017 | 0.952 ± 0.001 |
+| On-site | gradient boosting | 2.397 ± 0.014 | 2.997 ± 0.016 | 0.952 ± 0.001 |
 
-The three families are indistinguishable — they agree to within 0.001 L at both stages. This
+The three families are indistinguishable, and the ten-seed spread is what makes that
+statement defensible rather than merely apparent: they differ by 0.001 L while the
+seed-to-seed standard deviation is 0.038 L at planning time — the noise between splits is
+roughly forty times the gap between models. Reported from one split, the ranking between
+them would be an artefact of which rows happened to land in the test set. This
 is not a disappointing result but an informative one: the underlying structure is a small,
 fully-populated contingency table, with 6 cells at planning time and 24 on site, each
 supported by hundreds to thousands of observations. Once the correct features are present
@@ -168,10 +180,11 @@ ensemble for a 0.0003 L improvement.
 
 The on-site RMSE of 3.00 L sits at the noise floor identified in the EDA, meaning the on-site
 model extracts essentially all available signal. Measured interval coverage on the held-out
-test split is 0.900 at planning time and 0.899 on site, against a 0.90 nominal level.
+test split is 0.8985 ± 0.0053 at planning time and 0.9000 ± 0.0052 on site over ten seeds,
+against a 0.90 nominal level.
 
 The gap between the two stages quantifies the cost of not knowing dirtiness: MAE roughly
-doubles, from 2.40 L to 5.93 L, and the interval widens from about ±5 L to about ±12 L.
+doubles, from 2.40 L to 5.90 L, and the interval widens from about ±5 L to about ±12 L.
 
 ### 5.2 Tank capacity
 
@@ -187,6 +200,10 @@ the crew short roughly once every two days. Per-job consumption has a standard d
 13.60 L and a maximum of 103.6 L, and summing several draws from that distribution produces
 a spread that mean arithmetic discards entirely. **A capacity figure quoted without a service
 level is not a usable number.**
+
+These capacities are stable: repeating the resampling under ten different seeds returns the
+same 2 / 4 / 5 jobs at every service level, so the figures are a property of the consumption
+distribution rather than of one draw.
 
 ### 5.3 Refill frequency
 

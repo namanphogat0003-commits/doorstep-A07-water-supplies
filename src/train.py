@@ -3,9 +3,11 @@
 Run from the repository root:  python src/train.py
 """
 
+import subprocess
 from datetime import datetime, timezone
 from itertools import product
 
+import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
@@ -32,6 +34,11 @@ from model import MODEL_ORDER, IntervalRegressor, build_model
 from optimise import evaluate_plans
 from sustainability import sustainability_comparison
 
+# Rule 4: one run is an anecdote. Every split-dependent number is reported as an
+# average and a spread over these seeds. SEED (7) matches the dataset generator and is
+# the one used for the published per-scenario figures and for resampling.
+SEEDS = list(range(10))
+
 TEST_SIZE = 0.2
 CALIBRATION_SIZE = 0.25  # of the training split, giving a 60/20/20 fit/calibrate/test
 INTERVAL_LEVEL = 0.90
@@ -49,6 +56,7 @@ RUNS = [
 ]
 
 EXPERIMENTS = ROOT / "experiments.csv"
+MODEL_COMPARISON = RESULTS / "model_comparison.csv"
 CONSUMPTION_MODEL = RESULTS / "consumption_model.csv"
 TANK_CAPACITY = RESULTS / "tank_capacity.csv"
 REFILL_PLANNING = RESULTS / "refill_planning.csv"
@@ -56,7 +64,17 @@ SUSTAINABILITY = RESULTS / "sustainability.csv"
 TANK_PLAN = RESULTS / "tank_plan.csv"
 
 
-def run_experiments(df, idx_train, idx_test):
+def split(df, seed):
+    """60/20/20 fit / calibrate / test."""
+    idx_train, idx_test = train_test_split(df.index, test_size=TEST_SIZE, random_state=seed)
+    idx_fit, idx_calibrate = train_test_split(
+        idx_train, test_size=CALIBRATION_SIZE, random_state=seed
+    )
+    return idx_train, idx_fit, idx_calibrate, idx_test
+
+
+def run_experiments(df, seed):
+    idx_train, _, _, idx_test = split(df, seed)
     y = df[TARGET]
     interior_test = df.loc[idx_test, "addon_interior_clean"]
 
@@ -68,6 +86,7 @@ def run_experiments(df, idx_train, idx_test):
 
         results.append(
             {
+                "seed": seed,
                 "stage": stage,
                 "model": model_name,
                 "n_train": len(idx_train),
@@ -80,11 +99,53 @@ def run_experiments(df, idx_train, idx_test):
     return pd.DataFrame(results)
 
 
-def log_experiments(experiments):
-    logged = experiments.copy()
-    logged.insert(0, "run_at", datetime.now(timezone.utc).isoformat(timespec="seconds"))
-    header = not EXPERIMENTS.exists() or EXPERIMENTS.stat().st_size == 0
-    logged.round(4).to_csv(EXPERIMENTS, mode="a", header=header, index=False, encoding="utf-8")
+def sweep_seeds(df):
+    return pd.concat([run_experiments(df, seed) for seed in SEEDS], ignore_index=True)
+
+
+def summarise_sweep(sweep):
+    """Average and spread per stage and model, which is what Rule 5 asks us to report."""
+    summary = sweep.groupby(["stage", "model"], sort=False)[
+        ["mae", "rmse", "r2"]
+    ].agg(["mean", "std", "min", "max"])
+    summary.columns = [f"{metric}_{stat}" for metric, stat in summary.columns]
+    summary.insert(0, "n_seeds", sweep.groupby(["stage", "model"], sort=False).size())
+    return summary.reset_index()
+
+
+def log_experiments(sweep):
+    """Append one row per run in the schema Rule 6 fixes, extra columns at the end."""
+    existing = 0
+    if EXPERIMENTS.exists() and EXPERIMENTS.stat().st_size > 0:
+        existing = len(pd.read_csv(EXPERIMENTS))
+
+    who = subprocess.run(
+        ["git", "config", "user.name"], capture_output=True, text=True
+    ).stdout.strip() or "unknown"
+
+    logged = pd.DataFrame(
+        {
+            "run_id": [f"R{existing + i + 1:03d}" for i in range(len(sweep))],
+            "date": datetime.now(timezone.utc).date().isoformat(),
+            "who": who,
+            "what_changed": sweep.stage + " / " + sweep.model,
+            "main_metric": "MAE",
+            "value": sweep.mae.round(4),
+            "seed": sweep.seed,
+            "notes": sweep.apply(
+                lambda r: f"RMSE {r.rmse:.3f}, R2 {r.r2:.4f}, "
+                f"MAE exterior {r.mae_exterior:.3f} / interior {r.mae_interior:.3f}",
+                axis=1,
+            ),
+            "stage": sweep.stage,
+            "model": sweep.model,
+            "n_features": sweep.n_features,
+            "n_train": sweep.n_train,
+            "n_test": sweep.n_test,
+        }
+    )
+    header = existing == 0
+    logged.to_csv(EXPERIMENTS, mode="a", header=header, index=False, encoding="utf-8")
 
 
 def scenario_frame(stage):
@@ -102,11 +163,12 @@ def scenario_frame(stage):
 def select_model(candidates):
     """Prefer the simplest family within a tolerance of the best MAE.
 
-    The families land within ~0.001 L of each other, so selecting on raw argmin would
-    hand the deliverable a gradient-boosting model for no measurable gain.
+    The families land within ~0.001 L of each other averaged over seeds, well inside the
+    seed-to-seed spread, so selecting on raw argmin would hand the deliverable a
+    gradient-boosting model for no measurable gain.
     """
     within_tolerance = candidates[
-        candidates["mae"] <= candidates["mae"].min() * (1 + SELECTION_TOLERANCE)
+        candidates["mae_mean"] <= candidates["mae_mean"].min() * (1 + SELECTION_TOLERANCE)
     ]
     return min(within_tolerance["model"], key=MODEL_ORDER.index)
 
@@ -157,27 +219,35 @@ def scenario_predictions(df, stage, model, model_name):
 def main():
     df = load_jobs()
     vehicles = load_vehicles()
-    idx_train, idx_test = train_test_split(df.index, test_size=TEST_SIZE, random_state=SEED)
-    idx_fit, idx_calibrate = train_test_split(
-        idx_train, test_size=CALIBRATION_SIZE, random_state=SEED
-    )
 
-    experiments = run_experiments(df, idx_train, idx_test)
-    log_experiments(experiments)
-    print("Model comparison (held-out test split)")
-    print(experiments.round(3).to_string(index=False))
+    sweep = sweep_seeds(df)
+    log_experiments(sweep)
+    summary = summarise_sweep(sweep)
+    summary.round(4).to_csv(MODEL_COMPARISON, index=False, encoding="utf-8")
+    print(f"Model comparison over {len(SEEDS)} seeds (mean +/- sd on held-out test)")
+    for _, row in summary.iterrows():
+        print(
+            f"  {row.stage:<10} {row.model:<12} MAE {row.mae_mean:6.3f} +/- {row.mae_std:.3f}"
+            f"   RMSE {row.rmse_mean:6.3f} +/- {row.rmse_std:.3f}"
+            f"   R2 {row.r2_mean:+.4f} +/- {row.r2_std:.4f}"
+        )
 
+    _, idx_fit, idx_calibrate, idx_test = split(df, SEED)
     deliverable = []
     models = {}
     for stage in ("planning", "onsite"):
-        candidates = experiments[experiments.stage == stage]
-        best = select_model(candidates)
-        model, coverage = fit_deliverable_model(
-            df, stage, best, idx_fit, idx_calibrate, idx_test
+        best = select_model(summary[summary.stage == stage])
+        coverages = np.array(
+            [
+                fit_deliverable_model(df, stage, best, *split(df, seed)[1:])[1]
+                for seed in SEEDS
+            ]
         )
+        model, _ = fit_deliverable_model(df, stage, best, idx_fit, idx_calibrate, idx_test)
         print(
             f"\n{stage}: selected {best} | "
-            f"{int(INTERVAL_LEVEL * 100)}% interval coverage {coverage:.3f} on held-out test"
+            f"{int(INTERVAL_LEVEL * 100)}% interval coverage "
+            f"{coverages.mean():.4f} +/- {coverages.std():.4f} over {len(SEEDS)} seeds"
         )
         models[stage] = model
         deliverable.append(scenario_predictions(df, stage, model, best))
@@ -204,6 +274,14 @@ def main():
     tanks.to_csv(TANK_CAPACITY, index=False, encoding="utf-8")
     print("\nMaximum jobs per tank")
     print(tanks.to_string(index=False))
+
+    across_seeds = [jobs_per_tank(df[TARGET], vehicles, seed=seed) for seed in SEEDS]
+    for level in ("max_jobs_at_90pct", "max_jobs_at_95pct", "max_jobs_at_99pct"):
+        spread = pd.concat([t[level] for t in across_seeds], axis=1)
+        print(
+            f"  {level}: identical across {len(SEEDS)} resampling seeds: "
+            f"{bool((spread.nunique(axis=1) == 1).all())}"
+        )
 
     refills = refill_plan(df, vehicles)
     refills.to_csv(REFILL_PLANNING, index=False, encoding="utf-8")
@@ -252,7 +330,8 @@ def main():
     print(f"wrote {REFILL_PLANNING.relative_to(ROOT)} ({len(refills)} rows)")
     print(f"wrote {SUSTAINABILITY.relative_to(ROOT)} ({len(sustainability)} rows)")
     print(f"wrote {TANK_PLAN.relative_to(ROOT)} ({len(plans)} rows)")
-    print(f"logged {len(experiments)} runs to {EXPERIMENTS.relative_to(ROOT)}")
+    print(f"wrote {MODEL_COMPARISON.relative_to(ROOT)} ({len(summary)} rows)")
+    print(f"logged {len(sweep)} runs to {EXPERIMENTS.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":
