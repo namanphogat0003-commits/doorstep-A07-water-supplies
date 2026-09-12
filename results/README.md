@@ -12,6 +12,7 @@ Outputs produced by the A7 pipeline. Everything here is regenerated from
 | `tank_capacity.csv` | required A7 deliverable (max jobs per tank) | produced by `src/train.py` |
 | `refill_planning.csv` | refill frequency per crew-day | produced by `src/train.py` |
 | `sustainability.csv` | comparison with conventional car washing | produced by `src/train.py` |
+| `tank_plan.csv` | best set of jobs to fit one tank | produced by `src/train.py` |
 
 Regenerate both with `python src/train.py` from the repository root. That also appends
 one row per model run to `experiments.csv`.
@@ -81,6 +82,45 @@ Sources, for citation in the paper:
 - International Carwash Association, *Water Use, Evaporation, and Carryout in Professional
   Carwashes*, 2018, measuring 12 sites (6 conveyor, 6 in-bay) during 2017. Note this is an
   industry body reporting on its own sector.
+
+## tank_plan.csv
+
+The module brief's third roadmap item: given a tank capacity, the best set of jobs to fit
+in a day. Each row is one tank size, one planning basis and one selection method.
+
+Columns:
+
+- `vehicle_type`, `capacity_litres` — the tank
+- `planning_basis` — which water figure the plan was built from: `oracle_actual` (actual
+  consumption, an upper bound no planner can reach), `planning_point` (the planning-time
+  model's point estimate), `planning_safe` (the upper end of its 90% interval)
+- `method` — `booked_order` (serve in booked order until the tank cannot cover the next
+  job, then stop: the manager's default), `value_density` (greedily take the highest
+  revenue per litre that fits), `exact_knapsack` (exact 0/1 knapsack by dynamic
+  programming)
+- `jobs_served_pct`, `revenue_captured_pct` — share of all jobs and all revenue captured
+- `overflow_pct_of_crew_days` — share of crew-days where the plan's *actual* consumption
+  exceeded the tank. This is the failure the module exists to prevent.
+
+Revenue is the objective, not a feature. It equals the booking's `total_price`, so it is
+known when the plan is made, and it is never used to predict water.
+
+Three findings:
+
+**Optimising by value buys revenue, not jobs.** On the 200 L van, booked order captures
+58.5% of revenue against the exact knapsack's 71.7% — 13.2 points more revenue for only
+3.8 points more jobs, by preferring jobs worth more per litre.
+
+**Exact optimisation barely beats greedy.** Value-density greedy reaches 70.9% against the
+exact 71.7%, roughly 99% of optimal. The knapsack is worth implementing to know that, not
+because the operation needs it.
+
+**Better optimisation makes overflow worse.** Planning on point predictions, booked order
+overflows on 5.9% of crew-days but the exact knapsack overflows on 11.9%. Tighter packing
+leaves no slack for prediction error, so the better the optimiser the more fragile the
+plan. Planning on the interval's upper bound removes overflow entirely (0.0%) at a cost of
+about 10 points of jobs and revenue. That trade is the reason the model reports an interval
+rather than a point.
 
 ## Model selection
 

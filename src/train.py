@@ -29,6 +29,7 @@ from evaluate import (
     regression_metrics,
 )
 from model import MODEL_ORDER, IntervalRegressor, build_model
+from optimise import evaluate_plans
 from sustainability import sustainability_comparison
 
 TEST_SIZE = 0.2
@@ -52,6 +53,7 @@ CONSUMPTION_MODEL = RESULTS / "consumption_model.csv"
 TANK_CAPACITY = RESULTS / "tank_capacity.csv"
 REFILL_PLANNING = RESULTS / "refill_planning.csv"
 SUSTAINABILITY = RESULTS / "sustainability.csv"
+TANK_PLAN = RESULTS / "tank_plan.csv"
 
 
 def run_experiments(df, idx_train, idx_test):
@@ -166,6 +168,7 @@ def main():
     print(experiments.round(3).to_string(index=False))
 
     deliverable = []
+    models = {}
     for stage in ("planning", "onsite"):
         candidates = experiments[experiments.stage == stage]
         best = select_model(candidates)
@@ -176,6 +179,7 @@ def main():
             f"\n{stage}: selected {best} | "
             f"{int(INTERVAL_LEVEL * 100)}% interval coverage {coverage:.3f} on held-out test"
         )
+        models[stage] = model
         deliverable.append(scenario_predictions(df, stage, model, best))
 
     consumption_model = pd.concat(deliverable, ignore_index=True)[
@@ -212,6 +216,22 @@ def main():
         f"| p95 {loads.litres.quantile(0.95):.0f} L | max {loads.litres.max():.0f} L"
     )
 
+    planning_X = build_features(df, "planning")
+    df["predicted_litres"] = models["planning"].predict(planning_X)
+    df["predicted_safe_litres"] = models["planning"].predict_interval(planning_X)[1]
+    plans = evaluate_plans(
+        df,
+        vehicles,
+        {
+            "oracle_actual": TARGET,
+            "planning_point": "predicted_litres",
+            "planning_safe": "predicted_safe_litres",
+        },
+    )
+    plans.to_csv(TANK_PLAN, index=False, encoding="utf-8")
+    print("\nBest set of jobs per tank (share of all jobs / revenue, and overflow rate)")
+    print(plans.to_string(index=False))
+
     sustainability = sustainability_comparison(df)
     sustainability.to_csv(SUSTAINABILITY, index=False, encoding="utf-8")
     print("\nWater use against published benchmarks (L per wash)")
@@ -231,6 +251,7 @@ def main():
     print(f"wrote {TANK_CAPACITY.relative_to(ROOT)} ({len(tanks)} rows)")
     print(f"wrote {REFILL_PLANNING.relative_to(ROOT)} ({len(refills)} rows)")
     print(f"wrote {SUSTAINABILITY.relative_to(ROOT)} ({len(sustainability)} rows)")
+    print(f"wrote {TANK_PLAN.relative_to(ROOT)} ({len(plans)} rows)")
     print(f"logged {len(experiments)} runs to {EXPERIMENTS.relative_to(ROOT)}")
 
 

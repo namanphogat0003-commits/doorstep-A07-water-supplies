@@ -23,7 +23,12 @@ conventional arithmetic of dividing tank capacity by mean consumption overstates
 badly: the resulting figures hold only 53–91% of the time. At a 95% service level the
 defensible capacities are 2, 4 and 5 jobs for the 200, 280 and 350 L vans. Because crews
 average 262 L per day, refills are routine rather than exceptional, and we report refill
-frequency as the operationally meaningful quantity. Finally, we compare Doorstep against
+frequency as the operationally meaningful quantity. Choosing *which* jobs to serve rather than how many, an exact knapsack captures 13 points
+more revenue than serving in booked order for under 4 points more jobs, while a greedy
+rule reaches 99% of that — but optimising on point predictions doubles the rate at which
+plans overflow the tank, from 5.9% of crew-days to 11.9%, because tight packing consumes
+the slack that absorbed prediction error. Planning on the interval's upper bound removes
+overflow entirely for about ten points of throughput. Finally, we compare Doorstep against
 published figures for conventional car washing and find the honest result to be mixed:
 mobile washing uses roughly a quarter of what home hose washing consumes, but nearly twice
 what a reclaim-equipped tunnel uses.
@@ -122,6 +127,21 @@ often *n* jobs actually fit, rather than dividing capacity by the mean. Refills 
 by walking each crew-day in arrival order and topping up before any job the remaining water
 cannot cover, assuming each day starts with a full tank.
 
+### 4.5 Choosing the best set of jobs
+
+Capacity analysis says how many jobs fit; it does not say *which*. Given a crew-day's
+bookings and a tank, the module selects a subset by three methods: serving in booked order
+until the tank cannot cover the next job (the manager's default, and the baseline),
+greedily taking the highest revenue per litre, and an exact 0/1 knapsack solved by dynamic
+programming over integer decilitres. Revenue is the objective rather than a feature — it
+equals the booking's quoted `total_price`, so it is known when the plan is made and is
+never used to predict water.
+
+Each method is run from three planning bases: actual consumption (an oracle no planner can
+reach), the planning-time model's point estimate, and the upper end of its 90% interval.
+Selection uses the planning basis; feasibility is judged against actual consumption. The
+gap between the two is what a real plan is exposed to.
+
 ## 5. Results
 
 ### 5.1 Prediction accuracy
@@ -185,7 +205,48 @@ require two or more refills. For fleet planning this reframes tank size: the dif
 between a 200 L and a 350 L van is not simply jobs per fill but 0.88 against 0.26
 interruptions per working day, each costing travel time to a water source.
 
-### 5.4 Sustainability comparison
+### 5.4 The best set of jobs
+
+Share of all jobs and all revenue captured, and the share of crew-days where the plan's
+actual consumption exceeded the tank:
+
+| Tank | Basis | Method | Jobs | Revenue | Overflow |
+|---|---|---|---|---|---|
+| 200 L | oracle | booked order | 59.3% | 58.5% | 0.0% |
+| 200 L | oracle | exact knapsack | 63.1% | 71.7% | 0.0% |
+| 200 L | point | booked order | 59.0% | 58.3% | 5.9% |
+| 200 L | point | value density | 61.1% | 70.3% | 8.1% |
+| 200 L | point | exact knapsack | 61.8% | 71.0% | **11.9%** |
+| 200 L | safe | exact knapsack | 52.3% | 61.9% | **0.0%** |
+| 280 L | point | exact knapsack | 78.8% | 84.8% | 10.5% |
+| 280 L | safe | exact knapsack | 68.9% | 77.0% | 0.0% |
+| 350 L | point | exact knapsack | 87.8% | 91.6% | 7.0% |
+| 350 L | safe | exact knapsack | 79.4% | 85.4% | 0.0% |
+
+Three results, in increasing order of interest.
+
+**Optimising by value buys revenue, not jobs.** On the 200 L van the exact knapsack
+captures 13.2 points more revenue than booked order for only 3.8 points more jobs, by
+preferring jobs worth more per litre. The operational gain is in what is served, not how
+much.
+
+**Exact optimisation barely beats greedy.** Value-density greedy reaches 70.9% of revenue
+against the knapsack's 71.7% — about 99% of optimal. Crew-days contain a median of four
+jobs, and knapsack instances that small are rarely hard. The exact solver is worth building
+in order to *know* the greedy rule is sufficient; it is not worth deploying over it.
+
+**Better optimisation makes the plan more fragile.** This is the result we did not expect.
+Planning on point predictions, booked order overflows the 200 L tank on 5.9% of crew-days,
+but the exact knapsack overflows on 11.9% — optimising doubles the failure rate. Packing a
+tank to its limit consumes exactly the slack that absorbed prediction error; a loose plan
+is accidentally robust. Planning instead on the upper end of the 90% interval removes
+overflow entirely, at a cost of roughly ten points of jobs and revenue.
+
+That trade is the module's central practical claim: an optimiser fed point estimates
+optimises the mean day and fails the bad one. The interval is not decoration on the
+prediction, it is what makes the optimiser safe to use.
+
+### 5.5 Sustainability comparison
 
 Doorstep draws no reclaimed water — a mobile van cannot recover what it sprays — so its
 55.7 L per job is entirely freshwater and compares directly against published freshwater
@@ -227,6 +288,14 @@ sector.
 - **Refill counts assume water is always available.** No travel time to a water source and no
   queueing is modelled; refills are counted, not costed.
 - **Water for travel and crew use is outside scope.** Only per-job consumption is modelled.
+- **The job selection assumes a known, droppable day.** All of a crew-day's bookings are
+  treated as known before the day starts and as free to drop. In reality bookings arrive
+  over time, and refusing a confirmed booking carries a customer cost this model does not
+  price. The figures are therefore an upper bound on what selection can achieve.
+- **Selection plans one tank-load and ignores refills.** The two are analysed separately;
+  a combined model would decide when to refill and what to serve jointly.
+- **Revenue is the only objective.** A real operation would weigh customer retention,
+  fairness across crews, and travel distance alongside it.
 - **The sustainability benchmarks are US figures** applied to an Indian operating context,
   and different sources define freshwater use differently — with and without reclaim, make-up
   water against total applied. The table reports the definitional split rather than averaging
@@ -242,9 +311,18 @@ features were right, three model families of very different capacity performed i
 which suggests that effort spent on feature semantics returned more here than effort spent on
 model selection would have.
 
+The optimisation result points the same way. The exact knapsack was worth building mainly
+to establish that a greedy rule already reaches 99% of it, and the more consequential
+finding was not about solution quality at all: optimising against point predictions doubled
+the rate at which plans overflowed the tank. A better optimiser made the operation less
+reliable, because packing to the limit spends the slack that had been quietly absorbing
+prediction error. Uncertainty and optimisation cannot be treated as separate concerns —
+the optimiser has to consume the interval, not the point.
+
 Operationally, the module's recommendation is that capacity be quoted as an interval with a
-stated service level, and that refill frequency, not jobs per tank, be treated as the
-planning quantity. Downstream consumers should take the distribution rather than the mean;
+stated service level, that refill frequency, not jobs per tank, be treated as the planning
+quantity, and that any selection run against the interval's upper bound rather than its
+centre. Downstream consumers should take the distribution rather than the mean;
 `INTEGRATION.md` records that contract.
 
 ## 8. Reproducing
@@ -257,7 +335,7 @@ python -m venv .venv
 ```
 
 Seed 7 throughout, matching the dataset generator. `src/train.py` regenerates every figure in
-sections 5.1 to 5.4 and appends each run to `experiments.csv`.
+sections 5.1 to 5.5 and appends each run to `experiments.csv`.
 
 ## References
 
