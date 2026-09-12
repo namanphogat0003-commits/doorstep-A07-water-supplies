@@ -23,7 +23,18 @@ This module predicts water consumption for mobile car-washing jobs and determine
 
 ## How to Run
 
-Project setup and execution instructions will be added as development progresses.
+```bash
+python -m venv .venv
+.venv/Scripts/python.exe -m pip install -r requirements.txt   # Windows
+.venv/Scripts/python.exe src/train.py
+```
+
+On macOS or Linux use `.venv/bin/python` instead. `src/train.py` trains both the
+planning-time and on-site models, writes `results/consumption_model.csv` and
+`results/tank_capacity.csv`, and appends the run to `experiments.csv`.
+
+`notebooks/01_exploration.ipynb` holds the EDA that the modelling choices rest on;
+re-run it to refresh `results/plots/`.
 
 ## Team Module
 

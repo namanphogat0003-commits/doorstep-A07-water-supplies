@@ -8,8 +8,39 @@ Outputs produced by the A7 pipeline. Everything here is regenerated from
 | Artefact | Stage | Status |
 |---|---|---|
 | `plots/` | EDA (Week 2) | produced — see below |
-| `consumption_model.csv` | required A7 deliverable | **not yet produced** (schema due Week 5) |
-| maximum jobs per tank | required A7 deliverable | **not yet final** — reference figures in EDA §13 |
+| `consumption_model.csv` | required A7 deliverable | produced by `src/train.py` |
+| `tank_capacity.csv` | required A7 deliverable (max jobs per tank) | produced by `src/train.py` |
+
+Regenerate both with `python src/train.py` from the repository root. That also appends
+one row per model run to `experiments.csv`.
+
+## consumption_model.csv
+
+One row per scenario the module has to quote a figure for, for both prediction stages:
+
+- `stage` — `planning` (booking-time, no dirtiness) or `onsite` (crew has seen the car)
+- `vehicle_size`, `dirtiness_level`, `interior_clean` — the scenario; `dirtiness_level` is
+  blank on planning rows because it is not knowable then
+- `predicted_litres` with `pi_low_litres` / `pi_high_litres` at `interval_level` 0.90
+- `n_observed`, `observed_mean_litres`, `observed_sd_litres` — empirical support per cell
+
+Intervals are residual quantiles calibrated on a split disjoint from both the fit and the
+test split, held separately for exterior and interior jobs because their spreads differ
+(~3 L against ~8 L). Measured coverage on the held-out test split is 0.900 for both stages.
+
+## tank_capacity.csv
+
+Maximum jobs per tank per vehicle at the 90 / 95 / 99% service levels, with the
+mean-based figure and the probability that it actually fits, by resampling observed
+per-job consumption (20,000 draws, seed 7).
+
+## Model selection
+
+All three families (cell mean, linear with size x dirtiness interaction, gradient boosting)
+land within ~0.001 L of each other at both stages, so `src/train.py` selects the simplest
+family within 1% of the best MAE rather than by raw argmin. Both stages select the cell
+mean. Held-out test MAE: 5.93 L planning, 2.40 L on-site, against an 11.23 L global-mean
+baseline.
 
 ## plots/
 
