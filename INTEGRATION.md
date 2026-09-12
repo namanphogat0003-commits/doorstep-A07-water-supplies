@@ -39,7 +39,7 @@ interior_clean = bookings["items"].str.contains("interior_clean", na=False).asty
 ```
 
 It is present on 27.9% of jobs, sold across every slot type, and adds +18.0 L. A consumer
-that keys off `slot_type` will miss it entirely — all five slot types average 55.0–55.8 L.
+that keys off `slot_type` will miss it entirely — all five slot types average 54.9–55.8 L.
 
 Each row carries `predicted_litres` with `pi_low_litres` / `pi_high_litres` at
 `interval_level` 0.90, plus `n_observed`, `observed_mean_litres` and `observed_sd_litres`

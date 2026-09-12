@@ -60,7 +60,7 @@ bookings. The duplicate-row glitch planted in `bookings` for module A17 never re
 
 Four findings from `notebooks/01_exploration.ipynb` determined the modelling approach.
 
-**The service tier is a decoy.** All five `slot_type` values average between 55.0 and
+**The service tier is a decoy.** All five `slot_type` values average between 54.9 and
 55.8 L — the column is nearly uninformative. The variable that matters is the
 `interior_clean` add-on, which appears inside the pipe-delimited `items` string on 27.9% of
 jobs and adds +18.0 L. It is sold across every slot type, so a feature set built from
