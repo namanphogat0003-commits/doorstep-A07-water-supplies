@@ -1,553 +1,597 @@
 // Builds paper/A7_slides.pptx.
 //   npm install pptxgenjs && node paper/make_slides.js
-// Every figure here comes from results/; regenerate those with `python src/train.py`.
+//
+// Every figure comes from results/; regenerate those with `python src/train.py`.
+//
+// Layout rule: slide code never sets a y coordinate. Text height is computed from the
+// string, the box width and the point size, and a column cursor advances by that height.
+// Overflow and overlap are therefore prevented by construction rather than by inspection.
 
 const pptxgen = require("pptxgenjs");
 const path = require("path");
 
-const INK = "0B2B3A";
-const DEEP = "065A82";
-const SEA = "00A896";
-const WARN = "D9532B";
-const WHITE = "FFFFFF";
-const MUTED = "5A6B73";
-const PALE = "EAF2F5";
+/* ── design system ──────────────────────────────────────────────────────── */
+
+const INK = "12333F";
+const SURFACE = "FFFFFF";
+const TINT = "EDF4F6";
+const BRAND = "0B6E8C";
+const SUPPORT = "17A398";
+const ALERT = "C25332";
+const MUTED = "68808B";
+const ON_DARK = "AFC7D0";
 
 const HEAD = "Cambria";
 const BODY = "Calibri";
-const PLOTS = path.join(__dirname, "..", "results", "plots");
 
+const DISPLAY = 40, TITLE = 30, ACCENT = 24, LEAD = 20, TEXT = 18, MICRO = 14;
+
+const W = 13.333, H = 7.5;
+const MARGIN = 0.75;
+const CONTENT_W = W - 2 * MARGIN;
+const GUTTER = 0.28;
+const COLW = (CONTENT_W - 11 * GUTTER) / 12;
+
+const KICKER_Y = 0.75;
+const TITLE_Y = 1.12;
+const BODY_Y = 2.25;
+const FOOT_Y = 6.92;
+const CONTENT_BOTTOM = 6.66; // nothing may cross this
+
+const SPLIT_L = 7, SPLIT_R = 5; // the deck's single two-column ratio
+
+const col = (i) => MARGIN + i * (COLW + GUTTER);
+const span = (n) => n * COLW + (n - 1) * GUTTER;
+
+const FIGS = path.join(__dirname, "figures");
+
+let SLIDE_NO = 0;
 const pres = new pptxgen();
-pres.layout = "LAYOUT_WIDE"; // 13.3 x 7.5
+pres.layout = "LAYOUT_WIDE";
 pres.author = "A7 Water and Supplies";
-pres.title = "A7 — Water and Supplies";
+pres.title = "A7 - Water and Supplies";
 
-const W = 13.3;
-const M = 0.7;
+/* ── text metrics ───────────────────────────────────────────────────────── */
+// Average advance width as a fraction of the em, measured for these two faces.
+// Deliberately generous so estimated height is never under the truth.
+const EM_FRACTION = { [BODY]: 0.50, [HEAD]: 0.53 };
 
-function darkSlide() {
+function lineCount(text, widthIn, size, face, tracking) {
+  const em = size / 72;
+  const avg = (EM_FRACTION[face] || 0.50) * em + (tracking || 0) / 72;
+  const perLine = Math.max(1, Math.floor(widthIn / avg));
+  let lines = 0;
+  for (const para of String(text).split("\n")) {
+    const t = para.trim();
+    lines += t.length ? Math.ceil(t.length / perLine) : 1;
+  }
+  return lines;
+}
+
+function blockHeight(text, widthIn, size, face, leading, tracking) {
+  const lead = leading || size * 1.35;
+  return lineCount(text, widthIn, size, face, tracking) * lead / 72 + 0.06;
+}
+
+/* ── slide shells ───────────────────────────────────────────────────────── */
+
+function slideDark(kicker, title) {
+  SLIDE_NO += 1;
   const s = pres.addSlide();
   s.background = { color: INK };
-  return s;
-}
-
-function lightSlide(title, kicker) {
-  const s = pres.addSlide();
-  s.background = { color: WHITE };
   if (kicker) {
     s.addText(kicker.toUpperCase(), {
-      x: M, y: 0.42, w: W - 2 * M, h: 0.3,
-      fontSize: 18, bold: true, color: SEA, fontFace: BODY,
-      charSpacing: 1.5, isTextBox: true, margin: 0,
+      x: col(0), y: KICKER_Y, w: span(12), h: 0.3,
+      fontSize: MICRO, bold: true, color: SUPPORT, fontFace: BODY,
+      charSpacing: 2, isTextBox: true, margin: 0, valign: "top",
     });
   }
+  if (title) {
+    s.addText(title, {
+      x: col(0), y: TITLE_Y, w: span(11), h: 0.95,
+      fontSize: TITLE, bold: true, color: SURFACE, fontFace: HEAD,
+      isTextBox: true, margin: 0, valign: "top",
+    });
+  }
+  return s;
+}
+
+function slideLight(kicker, title) {
+  SLIDE_NO += 1;
+  const s = pres.addSlide();
+  s.background = { color: SURFACE };
+  s.addText(kicker.toUpperCase(), {
+    x: col(0), y: KICKER_Y, w: span(12), h: 0.3,
+    fontSize: MICRO, bold: true, color: SUPPORT, fontFace: BODY,
+    charSpacing: 2, isTextBox: true, margin: 0, valign: "top",
+  });
   s.addText(title, {
-    x: M, y: kicker ? 0.78 : 0.6, w: W - 2 * M, h: 0.95,
-    fontSize: 38, bold: true, color: INK, fontFace: HEAD,
-    isTextBox: true, margin: 0,
+    x: col(0), y: TITLE_Y, w: span(12), h: 0.95,
+    fontSize: TITLE, bold: true, color: INK, fontFace: HEAD,
+    isTextBox: true, margin: 0, valign: "top",
   });
   return s;
 }
 
-function statBlock(slide, x, y, w, value, label, color) {
-  slide.addText(value, {
-    x, y, w, h: 1.0,
-    fontSize: 60, bold: true, color, fontFace: HEAD,
-    isTextBox: true, margin: 0,
-  });
-  slide.addText(label, {
-    x, y: y + 1.02, w, h: 0.85,
-    fontSize: 18, color: MUTED, fontFace: BODY,
-    isTextBox: true, margin: 0,
+function footer(s, label) {
+  s.addText(label, {
+    x: col(0), y: FOOT_Y, w: span(12), h: 0.26,
+    fontSize: 11, color: MUTED, fontFace: BODY,
+    isTextBox: true, margin: 0, valign: "top",
   });
 }
 
-function card(slide, x, y, w, h) {
-  slide.addShape(pres.ShapeType.roundRect, {
-    x, y, w, h, rectRadius: 0.08,
-    fill: { color: PALE }, line: { color: PALE },
+/* ── column flow ────────────────────────────────────────────────────────── */
+
+const CARD_PAD = 0.3;
+
+function flow(slide, startCol, spanCols, yStart) {
+  const x = col(startCol);
+  const w = span(spanCols);
+  let y = yStart === undefined ? BODY_Y : yStart;
+
+  function guard(what) {
+    if (process.env.DECK_DEBUG) {
+      console.error(`  s${SLIDE_NO} ${spanCols}col ${what.padEnd(6)} -> ${y.toFixed(2)}`);
+    }
+    if (y > CONTENT_BOTTOM + 0.001) {
+      throw new Error(
+        `slide ${SLIDE_NO}: ${what} on a ${spanCols}-col flow ends at ${y.toFixed(2)}, ` +
+        `limit ${CONTENT_BOTTOM}`);
+    }
+  }
+
+  const api = {
+    get y() { return y; },
+    gap(n) { y += n; return api; },
+
+    text(t, o = {}) {
+      const size = o.size || TEXT;
+      const face = o.face || BODY;
+      const lead = o.leading || Math.round(size * 1.38);
+      const h = blockHeight(t, w, size, face, lead, o.charSpacing);
+      slide.addText(t, {
+        x, y, w, h,
+        fontSize: size, color: o.color || INK, bold: !!o.bold, italic: !!o.italic,
+        fontFace: face, lineSpacing: lead, charSpacing: o.charSpacing,
+        isTextBox: true, margin: 0, valign: "top",
+      });
+      y += h + (o.after === undefined ? 0.16 : o.after);
+      guard("text");
+      return api;
+    },
+
+    // value + caption, one fixed relationship used everywhere
+    stat(value, label, o = {}) {
+      const size = o.size || 36;
+      const vh = blockHeight(value, w, size, HEAD, size * 1.05);
+      slide.addText(value, {
+        x, y, w, h: vh,
+        fontSize: size, bold: true, color: o.color || BRAND, fontFace: HEAD,
+        lineSpacing: Math.round(size * 1.05), isTextBox: true, margin: 0, valign: "top",
+      });
+      y += vh + 0.04;
+      const lh = blockHeight(label, w, MICRO, BODY, MICRO * 1.3);
+      slide.addText(label, {
+        x, y, w, h: lh,
+        fontSize: MICRO, color: o.labelColor || MUTED, fontFace: BODY,
+        lineSpacing: Math.round(MICRO * 1.3), isTextBox: true, margin: 0, valign: "top",
+      });
+      y += lh + (o.after === undefined ? 0.2 : o.after);
+      guard("stat");
+      return api;
+    },
+
+    // items: [{ text, size, face, bold, color, charSpacing, after }]
+    card(items, o = {}) {
+      const innerW = w - 2 * CARD_PAD;
+      let inner = CARD_PAD;
+      const placed = items.map((it) => {
+        const size = it.size || TEXT;
+        const face = it.face || BODY;
+        const lead = it.leading || Math.round(size * 1.38);
+        const h = blockHeight(it.text, innerW, size, face, lead, it.charSpacing);
+        const rec = { it, h, dy: inner, size, face, lead };
+        inner += h + (it.after === undefined ? 0.14 : it.after);
+        return rec;
+      });
+      const naturalH = inner - (items.length ? (items[items.length - 1].after === undefined ? 0.14 : items[items.length - 1].after) : 0) + CARD_PAD;
+      const cardH = Math.max(naturalH, o.minH || 0);
+      if (o.measure) return naturalH;
+
+      slide.addShape(pres.ShapeType.roundRect, {
+        x, y, w, h: cardH, rectRadius: 0.06,
+        fill: { color: o.fill || TINT }, line: { color: o.fill || TINT },
+      });
+      placed.forEach((p) => {
+        slide.addText(p.it.text, {
+          x: x + CARD_PAD, y: y + p.dy, w: innerW, h: p.h,
+          fontSize: p.size, bold: !!p.it.bold, italic: !!p.it.italic,
+          color: p.it.color || INK, fontFace: p.face, lineSpacing: p.lead,
+          charSpacing: p.it.charSpacing,
+          isTextBox: true, margin: 0, valign: "top",
+        });
+      });
+      y += cardH + (o.after === undefined ? 0.2 : o.after);
+      guard("card");
+      return api;
+    },
+
+    image(file, h, o = {}) {
+      slide.addImage({
+        path: file, x, y, w, h,
+        sizing: { type: "contain", w, h },
+      });
+      y += h + (o.after === undefined ? 0.16 : o.after);
+      guard("image");
+      return api;
+    },
+
+    chart(data, h, o = {}) {
+      slide.addChart(o.type || pres.ChartType.bar, data, {
+        x, y, w, h,
+        barDir: "col", barGapWidthPct: 55,
+        chartColors: o.colors,
+        showLegend: false,
+        catAxisLabelColor: MUTED, valAxisLabelColor: MUTED,
+        catAxisLabelFontSize: MICRO, valAxisLabelFontSize: MICRO,
+        catAxisLabelFontFace: BODY, valAxisLabelFontFace: BODY,
+        valGridLine: { color: "E2EBEF", size: 1 },
+        catGridLine: { style: "none" },
+        showValue: true, dataLabelPosition: "outEnd",
+        dataLabelFontSize: MICRO, dataLabelFontFace: BODY, dataLabelColor: INK,
+        chartArea: { fill: { color: SURFACE } },
+        plotArea: { fill: { color: SURFACE } },
+        ...(o.extra || {}),
+      });
+      y += h + (o.after === undefined ? 0.16 : o.after);
+      guard("chart");
+      return api;
+    },
+  };
+  return api;
+}
+
+// two cards side by side, levelled to the taller of the two
+function cardPair(slide, y, leftItems, rightItems) {
+  const probe = (c, n, items) => flow(slide, c, n, y).card(items, { measure: true });
+  const h = Math.max(probe(0, 6, leftItems), probe(6, 6, rightItems));
+  flow(slide, 0, 6, y).card(leftItems, { minH: h });
+  flow(slide, 6, 6, y).card(rightItems, { minH: h });
+}
+
+// three stats side by side, each in its own narrow column
+function statRow(slide, y, entries, onDark) {
+  const each = 4;
+  entries.forEach((e, i) => {
+    flow(slide, i * each, each - (i === entries.length - 1 ? 0 : 1), y)
+      .stat(e.value, e.label, {
+        color: e.color,
+        labelColor: onDark ? ON_DARK : MUTED,
+        size: e.size || 36,
+      });
   });
 }
 
-const chartFrame = {
-  showLegend: false,
-  catAxisLabelColor: MUTED, valAxisLabelColor: MUTED,
-  catAxisLabelFontSize: 14, valAxisLabelFontSize: 14,
-  catAxisLabelFontFace: BODY, valAxisLabelFontFace: BODY,
-  valGridLine: { color: "DDE6EA", size: 1 },
-  catGridLine: { style: "none" },
-  showValue: true, dataLabelPosition: "outEnd",
-  dataLabelFontSize: 14, dataLabelFontFace: BODY, dataLabelColor: INK,
-};
-
-/* 1 — title ------------------------------------------------------------- */
+/* ── 1 · title ──────────────────────────────────────────────────────────── */
 {
-  const s = darkSlide();
-  s.addText("Water and Supplies", {
-    x: M, y: 2.15, w: W - 2 * M, h: 1.1,
-    fontSize: 54, bold: true, color: WHITE, fontFace: HEAD,
-    isTextBox: true, margin: 0,
-  });
-  s.addText("How much water a job takes, and how many jobs fit in the tank", {
-    x: M, y: 3.3, w: W - 2 * M - 1.5, h: 0.6,
-    fontSize: 22, color: SEA, fontFace: BODY, isTextBox: true, margin: 0,
-  });
-  s.addText("Module A7  ·  Doorstep, Track A", {
-    x: M, y: 4.35, w: 6, h: 0.4,
-    fontSize: 18, color: "9FB6C0", fontFace: BODY, isTextBox: true, margin: 0,
-  });
-  s.addText("Naman Kumar  ·  Ranu Raj  ·  Vansh Rana  ·  Priyanshu  ·  Rudransh", {
-    x: M, y: 4.8, w: W - 2 * M, h: 0.4,
-    fontSize: 18, color: WHITE, fontFace: BODY, isTextBox: true, margin: 0,
-  });
+  const s = slideDark();
+  const f = flow(s, 0, 10, 2.0);
+  f.text("MODULE A7", { size: MICRO, bold: true, color: SUPPORT, charSpacing: 2, after: 0.12 });
+  f.text("Water and Supplies", { size: DISPLAY, bold: true, color: SURFACE, face: HEAD, after: 0.12 });
+  f.text("How much water a job takes, and how many jobs fit in the tank",
+    { size: LEAD, color: SUPPORT, after: 1.3 });
+  f.text("Naman Kumar   ·   Ranu Raj   ·   Vansh Rana   ·   Priyanshu   ·   Rudransh",
+    { color: SURFACE, after: 0.1 });
+  f.text("Doorstep · Track A · Service as a Service", { size: MICRO, color: ON_DARK });
   s.addNotes(
-    "Naman opens. One sentence: Doorstep washes cars at the customer, the van carries its own " +
-    "water, so the tank is what limits the day. Our module answers two questions - how much " +
-    "water will this job take, and how many jobs fit before a refill. Keep this to 20 seconds."
+    "Naman opens, 20 seconds. Doorstep washes cars wherever the customer already is. The " +
+    "van carries its own water, so the tank limits the day, not demand. Our module answers " +
+    "two questions: how much water will this job take, and how many jobs fit before a refill."
   );
 }
 
-/* 2 — the problem ------------------------------------------------------- */
+/* ── 2 · the problem ────────────────────────────────────────────────────── */
 {
-  const s = darkSlide();
-  s.addText("The van carries its own water", {
-    x: M, y: 1.0, w: W - 2 * M, h: 0.9,
-    fontSize: 40, bold: true, color: WHITE, fontFace: HEAD,
-    isTextBox: true, margin: 0,
-  });
-  s.addText(
-    "Run out at job six and the rest of the day is cancelled.\n" +
-    "Capacity, not demand, is what bounds a crew's day.",
-    {
-      x: M, y: 2.05, w: 7.2, h: 1.4,
-      fontSize: 22, color: "CFE2E9", fontFace: BODY, lineSpacing: 32,
-      isTextBox: true, margin: 0,
-    }
-  );
-  statBlock(s, M, 3.8, 3.4, "262 L", "average water drawn per crew-day", SEA);
-  statBlock(s, M + 4.2, 3.8, 3.4, "200–350 L", "tank capacity across the fleet", SEA);
-  statBlock(s, M + 8.4, 3.8, 3.6, "61%", "of crew-days exceed the small van", WARN);
+  const s = slideDark("The constraint", "Run out at job six and the rest of the day is cancelled");
+  flow(s, 0, 11).text("Capacity, not demand, is what bounds a crew's day.",
+    { size: LEAD, color: ON_DARK });
+  statRow(s, 4.05, [
+    { value: "262 L", label: "average drawn per crew-day", color: SUPPORT },
+    { value: "200–350 L", label: "tank capacity across the fleet", color: SUPPORT },
+    { value: "61%", label: "of crew-days exceed the small van", color: ALERT },
+  ], true);
   s.addNotes(
-    "Naman. The framing slide. The three numbers do the work: crews draw 262 litres a day, " +
-    "tanks hold 200 to 350, so on the small van six days in ten need a refill. That is the " +
-    "whole motivation - a single jobs-per-tank number cannot describe this."
+    "Naman. The three numbers do the work. Crews draw 262 litres a day, tanks hold 200 to " +
+    "350, so on the small van six days in ten need a refill. That is the motivation: a " +
+    "single jobs-per-tank number cannot describe this."
   );
 }
 
-/* 3 — the decoy --------------------------------------------------------- */
+/* ── 3 · the decoy ──────────────────────────────────────────────────────── */
 {
-  const s = lightSlide("The service tier tells you nothing", "Finding 1");
-  s.addText(
-    "All five slot types average 54.9–55.8 L. The real driver is an add-on " +
-    "hidden inside a pipe-separated item string.",
-    {
-      x: M, y: 1.85, w: 5.4, h: 1.5,
-      fontSize: 19, color: INK, fontFace: BODY, lineSpacing: 28,
-      isTextBox: true, margin: 0,
-    }
-  );
-  card(s, M, 3.5, 5.4, 2.3);
-  s.addText("interior_clean", {
-    x: M + 0.3, y: 3.7, w: 4.8, h: 0.4,
-    fontSize: 20, bold: true, color: DEEP, fontFace: BODY, isTextBox: true, margin: 0,
-  });
-  s.addText(
-    "27.9% of jobs  ·  +18.0 L  ·  sold across every tier\n" +
-    "Parsed from bookings.items, not a column of its own",
-    {
-      x: M + 0.3, y: 4.2, w: 4.8, h: 1.3,
-      fontSize: 18, color: INK, fontFace: BODY, lineSpacing: 26,
-      isTextBox: true, margin: 0,
-    }
-  );
-  s.addImage({ path: path.join(PLOTS, "02_slot_type_vs_addon.png"), x: 6.5, y: 1.8, w: 6.1, h: 4.1 });
+  const s = slideLight("Finding 1", "The service tier tells you nothing");
+  const L = flow(s, 0, SPLIT_L);
+  L.text("All five slot types average 54.9–55.8 L. The variable that actually moves water " +
+         "is an add-on hidden inside a pipe-separated item string.", { after: 0.22 });
+  L.image(path.join(FIGS, "slot_vs_addon.png"), 2.9);
+
+  const R = flow(s, SPLIT_L, SPLIT_R);
+  R.card([
+    { text: "interior_clean", size: LEAD, bold: true, color: BRAND, after: 0.2 },
+    { text: "27.9% of jobs\n+18.0 L per job\nsold across every tier", leading: 30, after: 0.22 },
+    { text: "Parsed from bookings.items — not a column of its own", size: MICRO, color: MUTED, after: 0.16 },
+    { text: "Key off slot_type and you miss it entirely.", size: MICRO, color: MUTED, after: 0 },
+  ]);
+  footer(s, "39,302 completed jobs · bookings.items parsed for add-ons");
   s.addNotes(
-    "Ranu presents this one. The point to land: we nearly missed the second-largest effect in " +
-    "the data because it was inside a delimited string rather than exposed as a column. " +
-    "Left chart is flat, right chart is not, same jobs. If asked why it matters: a consumer " +
-    "keying off slot_type gets nothing."
+    "Ranu presents. The point to land: we nearly missed the second-largest effect in the " +
+    "data because it sat inside a delimited string rather than being exposed as a column. " +
+    "Left chart flat, right chart not, same jobs. Likely question: how did you find it? By " +
+    "exploding the items column and grouping — not from the correlation matrix."
   );
 }
 
-/* 4 — functional form --------------------------------------------------- */
+/* ── 4 · functional form ────────────────────────────────────────────────── */
 {
-  const s = lightSlide("Dirtiness multiplies, the add-on adds", "Finding 2");
-  s.addImage({ path: path.join(PLOTS, "03_functional_form.png"), x: M, y: 1.85, w: 6.4, h: 4.2 });
-  s.addText(
-    "Dirtiness scales a vehicle-size base by the same factors for every size:",
-    {
-      x: 7.5, y: 1.95, w: 5.1, h: 0.8,
-      fontSize: 19, color: INK, fontFace: BODY, lineSpacing: 26,
-      isTextBox: true, margin: 0,
-    }
-  );
-  s.addText("1.00   ·   1.18   ·   1.35   ·   1.53", {
-    x: 7.5, y: 2.85, w: 5.1, h: 0.6,
-    fontSize: 26, bold: true, color: DEEP, fontFace: HEAD, isTextBox: true, margin: 0,
-  });
-  s.addText(
-    "The interior add-on contributes a flat +18 L regardless of size or dirtiness.\n\n" +
-    "So a purely additive linear model is mis-specified — it needs a size × dirtiness " +
-    "interaction.",
-    {
-      x: 7.5, y: 3.7, w: 5.1, h: 2.3,
-      fontSize: 19, color: INK, fontFace: BODY, lineSpacing: 28,
-      isTextBox: true, margin: 0,
-    }
-  );
+  const s = slideLight("Finding 2", "Dirtiness multiplies, the add-on adds");
+  flow(s, 0, SPLIT_L).image(path.join(FIGS, "functional_form.png"), 4.2);
+
+  const R = flow(s, SPLIT_L, SPLIT_R);
+  R.text("Dirtiness scales the vehicle-size base by identical factors:", { after: 0.18 });
+  R.text("1.00 · 1.18 · 1.35 · 1.53", { size: ACCENT, bold: true, color: BRAND, face: HEAD, after: 0.28 });
+  R.text("The interior add-on adds a flat +18 L, whatever the size or dirt.", { after: 0.3 });
+  R.card([
+    { text: "An additive model is the wrong shape — it needs the interaction.",
+      bold: true, color: BRAND },
+  ]);
+  footer(s, "Exterior-only jobs · mean litres per cell");
   s.addNotes(
-    "Ranu. Short slide. The curves are parallel in ratio, not in difference - that is what " +
-    "multiplicative means. Consequence in one line: additive model is the wrong shape, so we " +
-    "add the interaction term. Expect a viva question on how you spotted it: the ratio table, " +
-    "not the correlation matrix."
+    "Ranu. Short slide. The curves are parallel in ratio, not in difference — that is what " +
+    "multiplicative means, and the ratio table is how we saw it. Consequence in one line: " +
+    "we add the interaction term."
   );
 }
 
-/* 5 — the constraint ---------------------------------------------------- */
+/* ── 5 · the constraint ─────────────────────────────────────────────────── */
 {
-  const s = lightSlide("The best predictor arrives too late", "The constraint");
-  s.addText(
-    "dirtiness_level is recorded when the crew reaches the car. Nothing at booking " +
-    "time predicts it — not rain, not temperature, not the customer's history.",
-    {
-      x: M, y: 1.9, w: 11.9, h: 1.0,
-      fontSize: 20, color: INK, fontFace: BODY, lineSpacing: 28,
-      isTextBox: true, margin: 0,
-    }
-  );
-  card(s, M, 3.1, 5.7, 2.9);
-  s.addText("PLANNING MODEL", {
-    x: M + 0.35, y: 3.35, w: 5.0, h: 0.35,
-    fontSize: 18, bold: true, color: DEEP, fontFace: BODY, charSpacing: 1.2,
-    isTextBox: true, margin: 0,
-  });
-  s.addText("vehicle size + interior_clean", {
-    x: M + 0.35, y: 3.78, w: 5.0, h: 0.4,
-    fontSize: 19, color: INK, fontFace: BODY, isTextBox: true, margin: 0,
-  });
-  s.addText("5.90 L", {
-    x: M + 0.35, y: 4.3, w: 5.0, h: 0.8,
-    fontSize: 44, bold: true, color: DEEP, fontFace: HEAD, isTextBox: true, margin: 0,
-  });
-  s.addText("mean absolute error — used for routing and quoting", {
-    x: M + 0.35, y: 5.15, w: 5.0, h: 0.7,
-    fontSize: 17, color: MUTED, fontFace: BODY, isTextBox: true, margin: 0,
-  });
+  const s = slideLight("The design decision", "The best predictor arrives too late");
+  flow(s, 0, 12).text(
+    "dirtiness_level is recorded when the crew reaches the car. Nothing at booking time " +
+    "predicts it — not rain, not temperature, not the customer's history.");
 
-  card(s, 7.0, 3.1, 5.6, 2.9);
-  s.addText("ON-SITE MODEL", {
-    x: 7.35, y: 3.35, w: 4.9, h: 0.35,
-    fontSize: 18, bold: true, color: SEA, fontFace: BODY, charSpacing: 1.2,
-    isTextBox: true, margin: 0,
-  });
-  s.addText("adds dirtiness and its interaction", {
-    x: 7.35, y: 3.78, w: 4.9, h: 0.4,
-    fontSize: 19, color: INK, fontFace: BODY, isTextBox: true, margin: 0,
-  });
-  s.addText("2.40 L", {
-    x: 7.35, y: 4.3, w: 4.9, h: 0.8,
-    fontSize: 44, bold: true, color: SEA, fontFace: HEAD, isTextBox: true, margin: 0,
-  });
-  s.addText("mean absolute error — used once the crew arrives", {
-    x: 7.35, y: 5.15, w: 4.9, h: 0.7,
-    fontSize: 17, color: MUTED, fontFace: BODY, isTextBox: true, margin: 0,
-  });
+  cardPair(s, 3.15,
+    [
+      { text: "PLANNING MODEL", size: MICRO, bold: true, color: BRAND, charSpacing: 2, after: 0.18 },
+      { text: "vehicle size + interior_clean", after: 0.22 },
+      { text: "5.90 L", size: 36, bold: true, color: BRAND, face: HEAD, after: 0.12 },
+      { text: "mean absolute error — routing, scheduling and quoting", size: MICRO, color: MUTED },
+    ],
+    [
+      { text: "ON-SITE MODEL", size: MICRO, bold: true, color: SUPPORT, charSpacing: 2, after: 0.18 },
+      { text: "adds dirtiness and its interaction", after: 0.22 },
+      { text: "2.40 L", size: 36, bold: true, color: SUPPORT, face: HEAD, after: 0.12 },
+      { text: "mean absolute error — once the crew has seen the car", size: MICRO, color: MUTED },
+    ]);
   s.addNotes(
-    "Vansh. This is the design decision the whole module rests on, so do not rush it. " +
-    "Using dirtiness at booking time would be leakage - the model would benchmark well and " +
-    "fail in deployment. Two models on disjoint feature sets, and a test in tests/ enforces " +
-    "that planning features never include dirtiness. Likely viva question: why not just " +
-    "predict dirtiness? Answer: we tried, it is an independent draw - uncorrelated with " +
-    "weather, flat across months, and the same customer varies more than customers differ."
+    "Vansh, and do not rush this — the whole module rests on it. Using dirtiness at booking " +
+    "time would be leakage: the model benchmarks well and fails in deployment. So two models " +
+    "on disjoint feature sets, with a test enforcing that planning features never include " +
+    "dirtiness. Expect: why not predict dirtiness? We tried. It behaves as an independent " +
+    "draw — uncorrelated with weather, flat across months, and the same customer varies more " +
+    "than customers differ from each other."
   );
 }
 
-/* 6 — accuracy ---------------------------------------------------------- */
+/* ── 6 · accuracy ───────────────────────────────────────────────────────── */
 {
-  const s = lightSlide("Against a baseline, over ten seeds", "Results");
-  s.addChart(
-    pres.ChartType.bar,
+  const s = slideLight("Results", "Halved, then halved again");
+  flow(s, 0, SPLIT_L).chart(
     [{
       name: "MAE (L)",
-      labels: ["Global mean\n(baseline)", "Vehicle-size\nmean", "Planning\nmodel", "On-site\nmodel"],
+      labels: ["Global mean", "Vehicle-size mean", "Planning model", "On-site model"],
       values: [11.152, 8.922, 5.897, 2.397],
-    }],
+    }], 4.1,
     {
-      x: M, y: 1.9, w: 7.3, h: 4.2,
-      barDir: "col",
-      chartColors: [MUTED, MUTED, DEEP, SEA],
-      ...chartFrame,
-      valAxisTitle: "mean absolute error, litres",
-      showValAxisTitle: true,
-      valAxisTitleColor: MUTED, valAxisTitleFontSize: 14, valAxisTitleFontFace: BODY,
-    }
-  );
-  s.addText(
-    "Every number is the mean of ten seeds, each reshuffling the split.\n\n" +
-    "The on-site model sits at the noise floor — within an exact feature cell, jobs " +
-    "scatter with sd ≈ 3 L no matter what we do.",
-    {
-      x: 8.4, y: 2.1, w: 4.2, h: 3.0,
-      fontSize: 19, color: INK, fontFace: BODY, lineSpacing: 28,
-      isTextBox: true, margin: 0,
-    }
-  );
+      colors: [MUTED, MUTED, BRAND, SUPPORT],
+      extra: {
+        dataLabelFormatCode: "0.00",
+        valAxisTitle: "mean absolute error, litres", showValAxisTitle: true,
+        valAxisTitleColor: MUTED, valAxisTitleFontSize: MICRO, valAxisTitleFontFace: BODY,
+      },
+    });
+
+  const R = flow(s, SPLIT_L, SPLIT_R);
+  R.text("Guessing the mean costs 11.15 L. Booking-time halves it; knowing the dirt " +
+         "halves it again.", { after: 0.3 });
+  R.card([
+    { text: "Every figure is the mean of ten seeds.", bold: true, after: 0.18 },
+    { text: "The on-site model is at the noise floor: within a cell, jobs scatter with " +
+            "sd ≈ 3 L whatever we do.", size: MICRO, color: MUTED },
+  ]);
+  footer(s, "Held-out test split · mean of ten seeds · results/model_comparison.csv");
   s.addNotes(
-    "Vansh. Name the baseline before the model - that is what the rubric rewards. Global mean " +
-    "11.15 litres is what you get by guessing. Planning halves it, on-site halves it again. " +
-    "Mention the spread: plus or minus 0.04 at planning, 0.014 on-site. Do not claim the " +
-    "on-site model could be improved - it is at the irreducible noise floor."
+    "Vansh. Name the baseline before the model — the rubric rewards that specifically. " +
+    "Global mean 11.15 litres is what guessing gets you. Quote the spread: plus or minus " +
+    "0.04 at planning, 0.014 on-site. Do not claim the on-site model could be improved; it " +
+    "is at the irreducible noise floor."
   );
 }
 
-/* 7 — models tie -------------------------------------------------------- */
+/* ── 7 · models tie ─────────────────────────────────────────────────────── */
 {
-  const s = lightSlide("Three model families, one answer", "What did not work");
-  s.addText(
-    "Cell mean, linear with interaction, and gradient boosting differ by 0.001 L. " +
-    "The seed-to-seed spread is 0.038 L.",
-    {
-      x: M, y: 1.9, w: 11.9, h: 0.9,
-      fontSize: 20, color: INK, fontFace: BODY, lineSpacing: 28,
-      isTextBox: true, margin: 0,
-    }
-  );
-  card(s, M, 3.0, 11.9, 1.55);
-  s.addText("The noise between splits is ~40× the gap between models.", {
-    x: M + 0.4, y: 3.35, w: 11.1, h: 0.85,
-    fontSize: 26, bold: true, color: DEEP, fontFace: HEAD, isTextBox: true, margin: 0,
-  });
-  s.addText(
-    "Reported from a single split, the ranking would be an artefact of which rows landed " +
-    "in the test set. We select the simplest family within 1% of the best — the cell mean — " +
-    "at both stages. Picking by raw argmin would have shipped gradient boosting for a " +
-    "0.0003 L gain.",
-    {
-      x: M, y: 4.9, w: 11.9, h: 1.7,
-      fontSize: 19, color: INK, fontFace: BODY, lineSpacing: 28,
-      isTextBox: true, margin: 0,
-    }
-  );
+  const s = slideLight("What did not work", "Three model families, one answer");
+  const top = flow(s, 0, 12);
+  top.text("Cell mean, linear with interaction, and gradient boosting differ by 0.001 L. " +
+           "The seed-to-seed spread is 0.038 L.", { after: 0.26 });
+  top.card([
+    { text: "The noise between splits is about forty times the gap between models.",
+      size: ACCENT, bold: true, color: BRAND, face: HEAD },
+  ], { after: 0.3 });
+
+  const y = top.y;
+  flow(s, 0, 6, y).text(
+    "From one split, the ranking would be an artefact of which rows landed in the test set.");
+  flow(s, 6, 6, y).text(
+    "We take the simplest family within 1% of the best — the cell mean — at both stages.");
   s.addNotes(
-    "Vansh. This is the honesty slide and it scores well - the guidebook says so explicitly. " +
-    "We are not claiming a win, we are claiming we cannot tell them apart, and we can only " +
-    "say that because we ran ten seeds. Be ready for: so why build the complex models? " +
-    "Answer: to establish the simple one is sufficient. That is a result, not a failure."
+    "Vansh. The honesty slide, and the guidebook says explicitly that it scores. We are not " +
+    "claiming a win; we are claiming we cannot tell the models apart, and we can only say " +
+    "that because we ran ten seeds. Expect: why build the complex models? To establish the " +
+    "simple one is sufficient. That is a result, not a failure."
   );
 }
 
-/* 8 — tank capacity ----------------------------------------------------- */
+/* ── 8 · tank capacity ──────────────────────────────────────────────────── */
 {
-  const s = lightSlide("Mean arithmetic overstates the tank", "Deliverable 1");
-  s.addChart(
-    pres.ChartType.bar,
+  const s = slideLight("Deliverable 1", "Mean arithmetic overstates the tank");
+  flow(s, 0, SPLIT_L).chart(
     [
       { name: "Mean-based", labels: ["200 L van", "280 L van", "350 L van"], values: [3, 5, 6] },
       { name: "95% service level", labels: ["200 L van", "280 L van", "350 L van"], values: [2, 4, 5] },
-    ],
+    ], 4.1,
     {
-      x: M, y: 1.95, w: 7.1, h: 4.1,
-      barDir: "col",
-      chartColors: [MUTED, DEEP],
-      ...chartFrame,
-      showLegend: true, legendPos: "b", legendFontSize: 16, legendFontFace: BODY,
-      valAxisTitle: "jobs per tank",
-      showValAxisTitle: true,
-      valAxisTitleColor: MUTED, valAxisTitleFontSize: 14, valAxisTitleFontFace: BODY,
-    }
-  );
-  s.addText("Dividing capacity by the 55.7 L mean gives 3 / 5 / 6 jobs.\nThose loads actually fit:", {
-    x: 8.2, y: 2.0, w: 4.4, h: 1.0,
-    fontSize: 19, color: INK, fontFace: BODY, lineSpacing: 26, isTextBox: true, margin: 0,
-  });
-  s.addText("91%   53%   70%", {
-    x: 8.2, y: 3.1, w: 4.4, h: 0.7,
-    fontSize: 30, bold: true, color: WARN, fontFace: HEAD, isTextBox: true, margin: 0,
-  });
-  s.addText(
-    "of the time. Load the EV van for five jobs and the crew runs dry roughly every " +
-    "second day.\n\nA capacity figure without a service level is not a usable number.",
-    {
-      x: 8.2, y: 3.95, w: 4.4, h: 2.1,
-      fontSize: 19, color: INK, fontFace: BODY, lineSpacing: 28, isTextBox: true, margin: 0,
-    }
-  );
+      colors: [MUTED, BRAND],
+      extra: {
+        showLegend: true, legendPos: "b", legendFontSize: MICRO, legendFontFace: BODY,
+        legendColor: MUTED,
+        valAxisTitle: "jobs per tank", showValAxisTitle: true,
+        valAxisTitleColor: MUTED, valAxisTitleFontSize: MICRO, valAxisTitleFontFace: BODY,
+      },
+    });
+
+  const R = flow(s, SPLIT_L, SPLIT_R);
+  R.text("Dividing capacity by the 55.7 L mean gives 3 / 5 / 6 jobs. Those loads fit:",
+    { after: 0.22 });
+  R.card([
+    { text: "91%   53%   70%", size: ACCENT, bold: true, color: ALERT, face: HEAD, after: 0.1 },
+    { text: "of the time — load the EV van for five and it runs dry every second day.",
+      size: MICRO, color: MUTED, after: 0 },
+  ], { after: 0.3 });
+  R.text("A capacity figure without a service level is not a usable number.",
+    { bold: true, color: BRAND });
+  footer(s, "20,000 resampled crew-days · identical under all ten seeds · results/tank_capacity.csv");
   s.addNotes(
-    "Priyanshu. One of the two required deliverables. The trap is that 280 divided by 55.7 " +
-    "equals 5 looks obviously right and is obviously wrong - it throws away the spread. " +
-    "We resample 20,000 crew-days instead. Add that the 2/4/5 figures are identical under " +
-    "all ten resampling seeds, so this is a property of the distribution, not one draw."
+    "Priyanshu. One of the two required deliverables. The trap: 280 divided by 55.7 equals " +
+    "five looks obviously right and is obviously wrong — it throws away the spread. We " +
+    "resample 20,000 crew-days instead. Add that 2/4/5 is identical under all ten resampling " +
+    "seeds, so it is a property of the distribution, not of one draw."
   );
 }
 
-/* 9 — refills ----------------------------------------------------------- */
+/* ── 9 · refills ────────────────────────────────────────────────────────── */
 {
-  const s = lightSlide("One tank does not cover a working day", "Deliverable 2");
-  s.addImage({ path: path.join(PLOTS, "07_tank_feasibility.png"), x: M, y: 1.9, w: 6.3, h: 4.1 });
-  s.addText("Mean refills needed per crew-day", {
-    x: 7.4, y: 1.95, w: 5.2, h: 0.4,
-    fontSize: 19, bold: true, color: INK, fontFace: BODY, isTextBox: true, margin: 0,
-  });
-  statBlock(s, 7.4, 2.5, 1.6, "0.88", "200 L van", WARN);
-  statBlock(s, 9.2, 2.5, 1.6, "0.45", "280 L van", DEEP);
-  statBlock(s, 11.0, 2.5, 1.6, "0.26", "350 L van", SEA);
-  s.addText(
-    "A fifth of small-van days need two or more refills. Refilling is normal operation, " +
-    "not an exception.\n\nFor fleet planning the real difference between a 200 L and a " +
-    "350 L van is not jobs per fill — it is 0.88 against 0.26 interruptions a day, each " +
-    "costing travel to a water source.",
-    {
-      x: 7.4, y: 4.35, w: 5.2, h: 2.2,
-      fontSize: 18, color: INK, fontFace: BODY, lineSpacing: 26, isTextBox: true, margin: 0,
-    }
-  );
+  const s = slideLight("Deliverable 2", "One tank does not cover a working day");
+  flow(s, 0, SPLIT_L).image(path.join(FIGS, "tank_feasibility.png"), 4.2);
+
+  const R = flow(s, SPLIT_L, SPLIT_R);
+  R.text("Mean refills needed per crew-day", { bold: true, after: 0.22 });
+  R.card([
+    { text: "0.88   ·   0.45   ·   0.26", size: ACCENT, bold: true, color: BRAND, face: HEAD, after: 0.08 },
+    { text: "200 L        280 L        350 L", size: MICRO, color: MUTED },
+  ], { after: 0.28 });
+  R.text("A fifth of small-van days need two or more. For fleet sizing that is the " +
+         "difference — not jobs per fill.", { color: BRAND, bold: true });
+  footer(s, "8,342 crew-days · results/refill_planning.csv");
   s.addNotes(
-    "Priyanshu. The point: a single jobs-per-tank number hides the real constraint. We count " +
-    "refills by walking each crew-day in arrival order and topping up before any job the " +
-    "remaining water cannot cover. This is the number A12 actually needs for fleet sizing, " +
-    "and it is in INTEGRATION.md."
+    "Priyanshu. A single jobs-per-tank number hides the real constraint. We count refills by " +
+    "walking each crew-day in arrival order and topping up before any job the remaining " +
+    "water cannot cover. This is the number A12 needs for fleet sizing, and it is in " +
+    "INTEGRATION.md."
   );
 }
 
-/* 10 — the optimiser ---------------------------------------------------- */
+/* ── 10 · the surprise ──────────────────────────────────────────────────── */
 {
-  const s = lightSlide("Optimising the plan made it fail more often", "The surprise");
-  s.addChart(
-    pres.ChartType.bar,
+  const s = slideLight("The surprise", "Optimising the plan made it fail more often");
+  flow(s, 0, SPLIT_L).chart(
     [{
-      name: "Crew-days that overflow the tank (%)",
-      labels: ["Booked order", "Greedy by\nvalue density", "Exact\nknapsack", "Exact knapsack,\nplanned on interval"],
+      name: "Crew-days that run dry (%)",
+      labels: ["Booked order", "Greedy by value", "Exact knapsack", "Knapsack on interval"],
       values: [5.9, 8.1, 11.9, 0.0],
-    }],
+    }], 4.1,
     {
-      x: M, y: 1.95, w: 7.4, h: 4.1,
-      barDir: "col",
-      chartColors: [MUTED, MUTED, WARN, SEA],
-      ...chartFrame,
-      valAxisTitle: "% of crew-days that run dry",
-      showValAxisTitle: true,
-      valAxisTitleColor: MUTED, valAxisTitleFontSize: 14, valAxisTitleFontFace: BODY,
-    }
-  );
-  s.addText(
-    "Choosing jobs by exact knapsack captures 13 points more revenue than serving in " +
-    "booked order — and doubles the rate of running dry.",
-    {
-      x: 8.5, y: 2.05, w: 4.1, h: 1.5,
-      fontSize: 19, color: INK, fontFace: BODY, lineSpacing: 28, isTextBox: true, margin: 0,
-    }
-  );
-  s.addText(
-    "Packing a tank to its limit spends exactly the slack that was absorbing prediction " +
-    "error. A loose plan is accidentally robust.\n\nPlanning against the interval's upper " +
-    "bound removes overflow entirely, for about ten points of throughput.",
-    {
-      x: 8.5, y: 3.7, w: 4.1, h: 2.4,
-      fontSize: 18, color: INK, fontFace: BODY, lineSpacing: 26, isTextBox: true, margin: 0,
-    }
-  );
+      colors: [MUTED, MUTED, ALERT, SUPPORT],
+      extra: {
+        dataLabelFormatCode: "0.0",
+        valAxisTitle: "% of crew-days that run dry", showValAxisTitle: true,
+        valAxisTitleColor: MUTED, valAxisTitleFontSize: MICRO, valAxisTitleFontFace: BODY,
+      },
+    });
+
+  const R = flow(s, SPLIT_L, SPLIT_R);
+  R.text("Exact knapsack captures 13 points more revenue than booked order — and doubles " +
+         "the rate of running dry.", { after: 0.28 });
+  R.card([
+    { text: "Packing to the limit spends the slack that was absorbing prediction error.",
+      bold: true, color: ALERT, after: 0.16 },
+    { text: "Planning on the interval's upper bound removes it entirely, for about ten " +
+            "points of throughput.", size: MICRO, color: MUTED },
+  ]);
+  footer(s, "200 L van · results/tank_plan.csv");
   s.addNotes(
-    "Priyanshu, and this is the slide to spend time on - it is the most interesting result " +
-    "we have. We expected a better optimiser to be strictly better. It is not: the exact " +
-    "knapsack doubles the failure rate against simply serving in booked order, because " +
-    "tight packing consumes the slack that was quietly absorbing prediction error. " +
-    "The fix is to feed the optimiser the interval instead of the point estimate. " +
-    "If asked whether this is known: yes - Elmachtoub and Grigas, Smart Predict-then-Optimize, " +
-    "though their uncertainty is in the objective and ours is in the constraint. " +
-    "Also worth saying: the greedy rule reaches 99% of the exact solution, so we built the " +
-    "knapsack mainly to prove greedy was enough."
+    "Priyanshu — spend time here, it is the most interesting result we have. We expected a " +
+    "better optimiser to be strictly better. It is not: the exact knapsack doubles the " +
+    "failure rate against simply serving in booked order, because tight packing consumes the " +
+    "slack that was quietly absorbing prediction error. The fix is to feed the optimiser the " +
+    "interval instead of the point estimate. If asked whether this is known: yes, Elmachtoub " +
+    "and Grigas, Smart Predict-then-Optimize — though their uncertainty sits in the objective " +
+    "and ours is in the constraint. Also note greedy reaches 99% of the exact solution, so we " +
+    "built the knapsack mainly to prove greedy was enough."
   );
 }
 
-/* 11 — sustainability --------------------------------------------------- */
+/* ── 11 · sustainability ────────────────────────────────────────────────── */
 {
-  const s = lightSlide("The green claim, stated honestly", "Sustainability");
-  s.addText("Doorstep uses 55.7 L per job, all of it freshwater — a van cannot reclaim.", {
-    x: M, y: 1.85, w: 11.9, h: 0.5,
-    fontSize: 20, color: INK, fontFace: BODY, isTextBox: true, margin: 0,
-  });
-  card(s, M, 2.6, 5.8, 3.5);
-  s.addText("WHAT WE CAN CLAIM", {
-    x: M + 0.35, y: 2.85, w: 5.1, h: 0.35,
-    fontSize: 18, bold: true, color: SEA, fontFace: BODY, charSpacing: 1.2, isTextBox: true, margin: 0,
-  });
-  s.addText(
-    "25% of a home hose left running\n" +
-    "22% of an unreclaimed conveyor\n" +
-    "49% of the measured conveyor fleet\n" +
-    "Level with a self-service bay",
-    {
-      x: M + 0.35, y: 3.35, w: 5.1, h: 2.4,
-      fontSize: 19, color: INK, fontFace: BODY, lineSpacing: 32, isTextBox: true, margin: 0,
-    }
-  );
-  card(s, 7.1, 2.6, 5.5, 3.5);
-  s.addText("WHAT WE CANNOT", {
-    x: 7.45, y: 2.85, w: 4.8, h: 0.35,
-    fontSize: 18, bold: true, color: WARN, fontFace: BODY, charSpacing: 1.2, isTextBox: true, margin: 0,
-  });
-  s.addText("189%", {
-    x: 7.45, y: 3.3, w: 4.8, h: 0.9,
-    fontSize: 48, bold: true, color: WARN, fontFace: HEAD, isTextBox: true, margin: 0,
-  });
-  s.addText(
-    "of a reclaim-equipped tunnel. It uses about half what we do per car, and the gap is " +
-    "structural — reclaim needs captured runoff, which a driveway cannot give.",
-    {
-      x: 7.45, y: 4.3, w: 4.8, h: 1.6,
-      fontSize: 18, color: INK, fontFace: BODY, lineSpacing: 26, isTextBox: true, margin: 0,
-    }
-  );
+  const s = slideLight("Sustainability", "The green claim, stated honestly");
+  flow(s, 0, 12).text(
+    "Doorstep uses 55.7 L per job, all of it freshwater — a van cannot reclaim.");
+
+  cardPair(s, 3.05,
+    [
+    { text: "WHAT WE CAN CLAIM", size: MICRO, bold: true, color: SUPPORT, charSpacing: 2, after: 0.22 },
+    { text: "25% of a home hose left running\n22% of an unreclaimed conveyor\n49% of the " + "measured conveyor fleet\nLevel with a self-service bay", leading: 32 },
+    ],
+    [
+    { text: "WHAT WE CANNOT", size: MICRO, bold: true, color: ALERT, charSpacing: 2, after: 0.16 },
+    { text: "189%", size: 36, bold: true, color: ALERT, face: HEAD, after: 0.12 },
+    { text: "of a reclaim-equipped tunnel. It uses about half what we do per car, and the " + "gap is structural — reclaim needs captured runoff, which a driveway cannot give." },
+    ]);
+  footer(s, "EPA WaterSense 2012 · International Carwash Association 2018 · Zaneti et al. 2013");
   s.addNotes(
-    "Rudransh. Every figure here is cited - EPA WaterSense, the International Carwash " +
+    "Rudransh. Every figure is cited — EPA WaterSense, the International Carwash " +
     "Association, and Zaneti et al., who audited a reclamation plant needing under 40 litres " +
-    "of fresh water per wash. That last one corroborates our result from outside our data. " +
-    "The right-hand card is the one that earns marks: we are telling the examiner where our " +
-    "own product loses. INTEGRATION.md records what other teams may and may not claim on our " +
-    "behalf, so marketing cannot quote us as beating a modern tunnel."
+    "of fresh water per wash. That corroborates our result from outside our own data. The " +
+    "right-hand card is what earns marks: we are telling the examiner where our own product " +
+    "loses. INTEGRATION.md records what other teams may and may not claim on our behalf."
   );
 }
 
-/* 12 — conclusions ------------------------------------------------------ */
+/* ── 12 · conclusions ───────────────────────────────────────────────────── */
 {
-  const s = darkSlide();
-  s.addText("What we would tell the company", {
-    x: M, y: 0.85, w: W - 2 * M, h: 0.85,
-    fontSize: 40, bold: true, color: WHITE, fontFace: HEAD, isTextBox: true, margin: 0,
-  });
+  const s = slideDark("What we would tell the company", "Three recommendations");
   const points = [
-    ["Quote capacity with a service level", "2 / 4 / 5 jobs at 95%, never a bare number"],
+    ["Quote capacity with a service level", "2 / 4 / 5 jobs at 95% — never a bare number"],
     ["Plan on refills, not jobs per tank", "0.88 / 0.45 / 0.26 interruptions per crew-day"],
     ["Feed the optimiser the interval", "the point estimate doubles the rate of running dry"],
   ];
+  let y = 2.45;
   points.forEach(([head, sub], i) => {
-    const y = 2.0 + i * 1.35;
-    s.addText(String(i + 1), {
-      x: M, y, w: 0.6, h: 0.6,
-      fontSize: 30, bold: true, color: SEA, fontFace: HEAD, isTextBox: true, margin: 0,
-    });
-    s.addText(head, {
-      x: M + 0.75, y, w: 11.0, h: 0.45,
-      fontSize: 24, bold: true, color: WHITE, fontFace: BODY, isTextBox: true, margin: 0,
-    });
-    s.addText(sub, {
-      x: M + 0.75, y: y + 0.5, w: 11.0, h: 0.45,
-      fontSize: 19, color: "9FB6C0", fontFace: BODY, isTextBox: true, margin: 0,
-    });
+    flow(s, 0, 1, y).text(String(i + 1), { size: ACCENT, bold: true, color: SUPPORT, face: HEAD });
+    const f = flow(s, 1, 11, y);
+    f.text(head, { size: LEAD, bold: true, color: SURFACE, after: 0.06 });
+    f.text(sub, { size: MICRO, color: ON_DARK });
+    y += 1.25;
   });
-  s.addText(
+  flow(s, 0, 12, 6.25).text(
     "Biggest open gap: if A14's photo check can grade dirt at booking, our planning error " +
     "halves — from 5.90 L to 2.40 L.",
-    {
-      x: M, y: 6.15, w: 11.9, h: 0.8,
-      fontSize: 19, color: SEA, fontFace: BODY, italic: true, isTextBox: true, margin: 0,
-    }
-  );
+    { size: MICRO, color: SUPPORT, italic: true, after: 0 });
   s.addNotes(
-    "Naman closes. Three recommendations, then the open gap - which is a good note to end on " +
-    "because it points at another team and shows we understand the system. " +
-    "Then hand to questions. Reminder for all five: everyone is asked individually, so know " +
-    "the file you own line by line, and roughly what the others built."
+    "Naman closes. Three recommendations, then the open gap — a good note to end on because " +
+    "it points at another team and shows we understand the system. Then questions. Reminder " +
+    "for all five: everyone is asked individually, so know the file you own line by line and " +
+    "roughly what the others built."
   );
 }
 
