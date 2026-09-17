@@ -5,6 +5,8 @@
 \usepackage{graphicx}
 \graphicspath{{figures/}}
 \usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
 \usepackage{textcomp}
 \usepackage[hidelinks]{hyperref}
 
@@ -172,6 +174,50 @@ achievable error.
 
 \section{Method}
 
+\subsection{Notation and problem statement}
+\label{sec:notation}
+
+Let $W_i > 0$ denote the water consumed by job $i$, in litres, and let $\mathbf{x}_i$ be the
+features observed for that job. Two feature sets are distinguished by \emph{when} they become
+available: $\mathbf{x}^{\mathrm{p}}_i$, known when the booking is taken, and
+$\mathbf{x}^{\mathrm{o}}_i \supset \mathbf{x}^{\mathrm{p}}_i$, known once the crew arrives.
+A predictor $\hat{f}$ is admissible at a decision point only if it depends solely on the
+features available there; using $\mathbf{x}^{\mathrm{o}}$ to make a booking-time decision is
+leakage.
+
+For a van of capacity $C$ litres, the quantity the operation needs is not the mean but the
+largest number of jobs that fits with stated confidence. Writing $\alpha$ for the service
+level, the capacity question is the chance constraint
+\begin{equation}
+n^{*}(C, \alpha) \;=\; \max \Bigl\{\, n \in \mathbb{N} \;:\;
+\Pr\Bigl[ \textstyle\sum_{i=1}^{n} W_i \le C \Bigr] \ \ge\ \alpha \,\Bigr\},
+\label{eq:chance}
+\end{equation}
+with the $W_i$ drawn from the empirical consumption distribution. We do not assume a
+parametric form for that distribution; \eqref{eq:chance} is evaluated by Monte Carlo, drawing
+$B = 20{,}000$ samples of $n$ jobs with replacement and taking the proportion that fit. The
+familiar $\lfloor C / \mathbb{E}[W] \rfloor$ is the special case obtained by replacing each
+$W_i$ with its mean, which discards the spread entirely and, as Section~\ref{sec:capacity}
+shows, is optimistic.
+
+Selection is a $0/1$ knapsack over one crew-day. Given jobs $i = 1, \dots, m$ with revenue
+$v_i$ and \emph{predicted} consumption $\hat{w}_i$,
+\begin{equation}
+\max_{\mathbf{z} \in \{0,1\}^m} \ \sum_{i=1}^{m} v_i z_i
+\quad \text{subject to} \quad \sum_{i=1}^{m} \hat{w}_i z_i \ \le\ C .
+\label{eq:knapsack}
+\end{equation}
+The distinction that matters is between the $\hat{w}_i$ that enters the constraint and the
+realised $W_i$ that determines whether the plan survives contact with the day. A plan is
+feasible in \eqref{eq:knapsack} yet fails in practice whenever
+$\sum_i W_i z_i > C$, and Section~\ref{sec:selection} measures how often that happens for
+three choices of $\hat{w}$: the realised value (an oracle), the model's point estimate, and
+the upper end of its $90\%$ interval.
+
+Revenue is the objective, never a feature. It equals the booking's quoted price, so it is
+known when the plan is made, but it is not used to predict water.
+
+
 \subsection{Two prediction stages}
 Because dirtiness arrives late, two models are trained on disjoint feature sets: a
 \emph{planning} stage using vehicle size and the interior add-on, available when the booking is
@@ -195,11 +241,30 @@ from residual quantiles, calibrated on a split disjoint from both the fitting an
 (a 60/20/20 arrangement) following~\cite{lei2018conformal}. Calibrating and measuring coverage
 on the same rows would report the nominal level back by construction.
 
+\begin{algorithm}[t]
+\caption{Refills needed for one crew-day}
+\label{alg:refill}
+\begin{algorithmic}[1]
+\Require realised consumptions $W_1, \dots, W_m$ in arrival order; capacity $C$
+\Ensure number of mid-day refills $r$
+\State $r \gets 0$; \quad $\rho \gets C$ \Comment{$\rho$ is water remaining; the day starts full}
+\For{$i \gets 1$ \textbf{to} $m$}
+  \If{$W_i > \rho$} \Comment{cannot start a job it has no water for}
+    \State $r \gets r + 1$; \quad $\rho \gets C$
+  \EndIf
+  \State $\rho \gets \rho - W_i$
+\EndFor
+\State \Return $r$
+\end{algorithmic}
+\end{algorithm}
+
 \subsection{Tank capacity and refills}
-Capacity is evaluated by resampling observed per-job consumption 20,000 times and asking how
-often $n$ jobs actually fit (Fig.~\ref{fig:feasibility}), rather than dividing capacity by the mean. Refills are counted by
-walking each crew-day in arrival order and topping up before any job the remaining water cannot
-cover, assuming each day starts with a full tank.
+Capacity is evaluated as set out in Section~\ref{sec:notation}, by resampling observed per-job consumption 20,000 times and asking how
+often $n$ jobs actually fit (Fig.~\ref{fig:feasibility}), rather than dividing capacity by the mean. Refills are counted by Algorithm~
+ef{alg:refill}, which walks each crew-day in arrival order
+and tops up before any job the remaining water cannot cover, assuming each day starts full.
+Topping up \emph{before} the job rather than part-way through it reflects the operational
+reality that a crew does not begin a wash it cannot finish.
 
 \subsection{Choosing the best set of jobs}
 Given a crew-day's bookings and a tank, the module selects a subset by three methods: serving in
@@ -265,6 +330,7 @@ level. The gap between stages quantifies the cost of not knowing dirtiness: MAE 
 from 2.40~L to 5.90~L, and the interval widens from about $\pm 5$~L to about $\pm 12$~L.
 
 \subsection{Tank capacity}
+\label{sec:capacity}
 
 \begin{table}[t]
 \caption{Maximum jobs per tank by service level}
@@ -430,6 +496,24 @@ consume the interval, not the point.
 Operationally, we recommend that capacity be quoted as an interval with a stated service level,
 that refill frequency rather than jobs per tank be treated as the planning quantity, and that any
 selection run against the interval's upper bound rather than its centre.
+
+\subsection{Future work}
+
+Three extensions follow directly from the limitations above. The first is to decide refilling
+and selection jointly: Algorithm~\ref{alg:refill} counts refills for a fixed schedule and
+\eqref{eq:knapsack} selects for a single tank-load, but the operation faces one problem, not
+two, and a crew that can refill mid-day should plan differently from one that cannot. The
+second is to replace the point constraint in \eqref{eq:knapsack} with an explicit chance
+constraint of the form $\Pr[\sum_i W_i z_i \le C] \ge \alpha$, solved directly rather than
+approximated by substituting an interval bound for $\hat{w}$; the chance-constrained knapsack
+literature~\cite{han2015chance} gives exact methods that our empirical substitute only
+approaches. The third is to attack the constraint rather than the decision: since
+Section~\ref{sec:accuracy} shows the gap between the two prediction stages is entirely
+attributable to unobserved dirtiness, a booking-time estimate of dirt level---from a customer
+photograph, for instance---would halve planning-time error and is worth more than any further
+work on the models themselves.
+
+
 
 \section*{Reproducibility}
 
