@@ -25,15 +25,17 @@ Python 3.12, `pip install -r requirements.txt`. Notebooks run on the `base` kern
 These are non-obvious and shape every later choice:
 
 - `slot_type` carries no water signal. The real driver is the `interior_clean` add-on
-  hidden inside the `|`-separated `bookings.items` string (+13.8 L, on 35.9% of jobs, sold
+  hidden inside the `|`-separated `bookings.items` string (+18.0 L, on 27.9% of jobs, sold
   across all slot types). Parse `items`; do not model off `slot_type`.
 - Dirtiness is **multiplicative** on a vehicle-size base (1.00 / 1.18 / 1.35 / 1.53,
-  identical across sizes) while `interior_clean` adds a flat ~14 L. A purely additive
+  identical across sizes) while `interior_clean` adds a flat +18 L. A purely additive
   linear model is mis-specified — log-transform the target or model the interaction.
 - `dirtiness_level` is recorded on crew arrival and is not predictable from booking-time
   data. This forces **two separate models**: a planning-time one (booking features only,
   no dirtiness) and an on-site one. Using dirtiness in a planning-time model is leakage.
-- Residual noise differs by job type: sd ~3 L for exterior jobs vs ~8 L for interior.
+- Within-cell noise is additive and uniform: sd ~3.0 L for exterior and interior jobs
+  alike. The wider ~7.3 L spread at planning time is unresolved dirtiness, not a property
+  of interior jobs — it applies to both groups equally.
 - Tank sizing must be reported as an interval at a stated service level, not a single
   number. Mean-based jobs-per-tank (3/5/6) overstates capacity; at 95% it is 2/4/5.
 
